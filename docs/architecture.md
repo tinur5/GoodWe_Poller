@@ -44,43 +44,69 @@ GoodWe Inverter(s)          Python Poller              MQTT Broker
 
 ## Register Map
 
-### Block A – Inverter runtime (35100 … 35199)
+### Block A – Inverter runtime (35100 … 35224)
 
-| Offset | Name | Scale | Unit |
-|--------|------|-------|------|
-| +3 | Vpv1 | ×0.1 | V |
-| +4 | Ipv1 | ×0.1 | A |
-| +5 | Ppv1 | ×1 | W |
-| +6–8 | PV2 (same pattern) | | |
-| +9–11 | PV3 | | |
-| +12–14 | PV4 | | |
-| +16 | Vgrid R | ×0.1 | V |
-| +18 | Fgrid R | ×0.01 | Hz |
-| +19,23,27 | Pgrid R/S/T | ×1 signed | W |
-| +28 | Pgrid total | ×1 signed | W (+ = export) |
-| +40 | Pbattery | ×1 signed | W (+ = charging) |
-| +41 | SOC | ×1 | % |
-| +47 | Pload | ×1 | W |
-| +54 | Temperature | ×0.1 | °C |
-| +56–57 | E_day PV | ×0.1 (32-bit) | kWh |
-| +60–61 | E_total PV | ×0.1 (32-bit) | kWh |
-| +70–71 | E_day charge | ×0.1 (32-bit) | kWh |
-| +74–75 | E_day discharge | ×0.1 (32-bit) | kWh |
+| Register | Offset | Name | Type | Scale | Unit |
+|----------|--------|------|------|-------|------|
+| 35103 | +3 | Vpv1 | u16 | ×0.1 | V |
+| 35104 | +4 | Ipv1 | u16 | ×0.1 | A |
+| 35105–35106 | +5–6 | Ppv1 | u32 | ×1 | W |
+| 35107 | +7 | Vpv2 | u16 | ×0.1 | V |
+| 35108 | +8 | Ipv2 | u16 | ×0.1 | A |
+| 35109–35110 | +9–10 | Ppv2 | u32 | ×1 | W |
+| 35111 | +11 | Vpv3 | u16 | ×0.1 | V |
+| 35112 | +12 | Ipv3 | u16 | ×0.1 | A |
+| 35113–35114 | +13–14 | Ppv3 | u32 | ×1 | W |
+| 35115 | +15 | Vpv4 | u16 | ×0.1 | V |
+| 35116 | +16 | Ipv4 | u16 | ×0.1 | A |
+| 35117–35118 | +17–18 | Ppv4 | u32 | ×1 | W |
+| 35121 | +21 | Vgrid R (L1) | u16 | ×0.1 | V |
+| 35122 | +22 | Igrid R | u16 | ×0.1 | A |
+| 35123 | +23 | Fgrid R | u16 | ×0.01 | Hz |
+| 35125 | +25 | Pgrid R | s16 | ×1, + = export | W |
+| 35130 | +30 | Pgrid S (L2) | s16 | ×1, + = export | W |
+| 35135 | +35 | Pgrid T (L3) | s16 | ×1, + = export | W |
+| 35140 | +40 | Active Power Total | s16 | ×1, + = export | W |
+| 35172 | +72 | Load Power Total | s16 | ×1 | W |
+| 35176 | +76 | Temperature (Radiator) | s16 | ×0.1 | °C |
+| 35182–35183 | +82–83 | Battery Power | s32 | ×1, + = discharge | W |
+| 35187 | +87 | Work Mode | u16 | – | – |
+| 35191–35192 | +91–92 | E_total PV | u32 | ÷10 | kWh |
+| 35193–35194 | +93–94 | E_day PV | u32 | ÷10 | kWh |
+| 35195–35196 | +95–96 | E_total Export | u32 | ÷10 | kWh |
+| 35200–35201 | +100–101 | E_total Import | u32 | ÷10 | kWh |
+| 35206–35207 | +106–107 | E_bat Charge Total | u32 | ÷10 | kWh |
+| 35208 | +108 | E_bat Charge Today | u16 | ÷10 | kWh |
+| 35209–35210 | +109–110 | E_bat Discharge Total | u32 | ÷10 | kWh |
+| 35211 | +111 | E_bat Discharge Today | u16 | ÷10 | kWh |
 
-### Block B – ARM external meter (36000 … 36049)
+### Block B – ARM external CT meter (36000 … 36049)
 
-| Offset | Name | Scale / Type | Unit |
-|--------|------|--------------|------|
-| +5 | Meter active power L1 | int16 signed | W |
-| +6 | Meter active power L2 | int16 signed | W |
-| +7 | Meter active power L3 | int16 signed | W |
-| +8 | Meter active power total | int16 signed | W |
-| +9 | Meter reactive power total | int16 signed | var |
-| +13 | Meter power factor | ×0.001 | – |
-| +14 | Meter frequency | ×0.01 | Hz |
-| +15–16 | E_total export (float32 hi+lo) | IEEE 754 float | kWh |
-| +17–18 | E_total import (float32 hi+lo) | IEEE 754 float | kWh |
-| +25–26 | Meter active power total (32-bit) | int32 signed | W |
+| Register | Offset | Name | Type | Scale | Unit |
+|----------|--------|------|------|-------|------|
+| 36005 | +5 | Meter active power L1 | s16 | ×1 | W |
+| 36006 | +6 | Meter active power L2 | s16 | ×1 | W |
+| 36007 | +7 | Meter active power L3 | s16 | ×1 | W |
+| 36008 | +8 | Meter active power total | s16 | ×1 | W |
+| 36009 | +9 | Meter reactive power total | s16 | ×1 | var |
+| 36013 | +13 | Meter power factor | s16 | ×0.001 | – |
+| 36014 | +14 | Meter frequency | u16 | ×0.01 | Hz |
+| 36015–36016 | +15–16 | E_total export (float32) | float32 | – | kWh |
+| 36017–36018 | +17–18 | E_total import (float32) | float32 | – | kWh |
+| 36025–36026 | +25–26 | Meter active power total (32-bit) | s32 | ×1 | W |
+
+> **Grid sign convention (Blocks A & B):** GoodWe reports positive = export to grid.
+> The integration **negates** all grid-power values so HA convention applies:
+> **positive = import from grid, negative = export to grid.**
+
+> **Battery sign convention (Block A pbattery / Block C):** positive = discharging
+> (contributing to house load), negative = charging. No negation is applied.
+
+### Block C – BMS / battery pack data (37000 … 37007)
+
+| Register | Offset | Name | Type | Scale | Unit |
+|----------|--------|------|------|-------|------|
+| 37007 | +7 | Battery SOC | u16 | ×1 | % |
 
 ## MQTT Topics
 

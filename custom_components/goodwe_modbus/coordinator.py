@@ -33,44 +33,75 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 # ── Register map ──────────────────────────────────────────────────────────────
-_BLOCK_A_START = 35100
-_BLOCK_A_COUNT = 100
-_BLOCK_B_START = 36000
-_BLOCK_B_COUNT = 50  # covers offsets 0–49 (36000–36049)
+# Based on GoodWe ET/EH/BT/BH ARM205 Modbus protocol v1.7 and confirmed
+# against the marcelblijleven/goodwe reference library (et.py, platform 205).
 
+_BLOCK_A_START = 35100
+_BLOCK_A_COUNT = 125   # offsets 0–124 (35100–35224)
+_BLOCK_B_START = 36000
+_BLOCK_B_COUNT = 50    # offsets 0–49  (36000–36049)
+_BLOCK_C_START = 37000
+_BLOCK_C_COUNT = 8     # offsets 0–7   (37000–37007); BMS data
+
+# Block A – inverter running data (offsets relative to 35100)
 _A = {
-    "vpv1": 3, "ipv1": 4, "ppv1": 5,
-    "vpv2": 6, "ipv2": 7, "ppv2": 8,
-    "vpv3": 9, "ipv3": 10, "ppv3": 11,
-    "vpv4": 12, "ipv4": 13, "ppv4": 14,
-    "vgrid_r": 16, "igrid_r": 17, "fgrid_r": 18, "pgrid_r": 19,
-    "pgrid_s": 23, "pgrid_t": 27, "pgrid_total": 28,
-    "work_mode": 37,
-    "pbattery": 40, "soc": 41,
-    "pload": 47,
-    "temperature": 54,
-    "e_day_pv": 56,
-    "e_total_pv": 60,
-    "e_day_charge": 70,
-    "e_day_discharge": 74,
+    # ── PV strings: voltage (u16, ×0.1 V), current (u16, ×0.1 A),
+    #    power (u32 = 2 registers, W) ─────────────────────────────────────────
+    "vpv1": 3,  "ipv1": 4,  "ppv1_hi": 5,  "ppv1_lo": 6,
+    "vpv2": 7,  "ipv2": 8,  "ppv2_hi": 9,  "ppv2_lo": 10,
+    "vpv3": 11, "ipv3": 12, "ppv3_hi": 13, "ppv3_lo": 14,
+    "vpv4": 15, "ipv4": 16, "ppv4_hi": 17, "ppv4_lo": 18,
+    # ── On-grid measurements (L1 voltage/current/frequency only) ─────────────
+    "vgrid_r": 21,   # L1 Voltage  (u16, ×0.1 V)
+    "igrid_r": 22,   # L1 Current  (u16, ×0.1 A)
+    "fgrid_r": 23,   # L1 Frequency (u16, ×0.01 Hz)
+    # offset 24: reserved
+    "pgrid_r": 25,   # L1 Active Power (signed int16, W;  + = export to grid)
+    "pgrid_s": 30,   # L2 Active Power (signed int16, W)
+    "pgrid_t": 35,   # L3 Active Power (signed int16, W)
+    "pgrid_total": 40,  # Active Power Total (signed int16, W; + = export)
+    # ── Load & backup ─────────────────────────────────────────────────────────
+    "pload": 72,     # Total Load Power (signed int16, W)
+    # ── Temperatures ─────────────────────────────────────────────────────────
+    "temperature": 76,  # Radiator temperature (signed int16, ×0.1 °C)
+    # ── Work mode ────────────────────────────────────────────────────────────
+    "work_mode": 87,
+    # ── Battery (signed int32 = 2 registers; + = discharging) ────────────────
+    "pbattery_hi": 82, "pbattery_lo": 83,
+    # ── Energy counters (all u32 = 2 registers, raw ÷10 = kWh) ───────────────
+    "e_total_pv_hi":  91, "e_total_pv_lo":  92,   # Total PV generation
+    "e_day_pv_hi":    93, "e_day_pv_lo":    94,   # Today PV generation
+    "e_total_export_hi": 95, "e_total_export_lo": 96,   # Total export
+    # offsets 97–99: h_total (run hours) + e_day_exp (u16)
+    "e_total_import_hi": 100, "e_total_import_lo": 101,  # Total import
+    # offsets 102–105: e_day_imp / e_load_total / e_load_day
+    "e_bat_charge_total_hi": 106, "e_bat_charge_total_lo": 107,
+    "e_bat_charge_day":      108,  # u16, ÷10 = kWh
+    "e_bat_discharge_total_hi": 109, "e_bat_discharge_total_lo": 110,
+    "e_bat_discharge_day":       111,  # u16, ÷10 = kWh
 }
 
+# Block B – ARM external CT meter (offsets relative to 36000)
 _B = {
-    # External meter – compact int16 readings (offsets 5–14)
-    "meter_p1":    5,   # Active power L1 (signed int16, W)
-    "meter_p2":    6,   # Active power L2 (signed int16, W)
-    "meter_p3":    7,   # Active power L3 (signed int16, W)
-    "meter_p":     8,   # Active power total (signed int16, W)
-    "meter_q":     9,   # Reactive power total (signed int16, var)
-    "meter_pf":   13,   # Power factor (×0.001)
-    "meter_freq": 14,   # Frequency (×0.01 Hz)
-    # External meter – energy counters.  Stored as IEEE 754 float32 (big-endian
-    # word order); raw unit is Wh, divide by 1000 to get kWh.  See also the
-    # marcelblijleven/goodwe reference library (Float type, scale=1000).
-    "e_total_export_hi": 15, "e_total_export_lo": 16,   # float32 → Wh ÷1000 = kWh
-    "e_total_import_hi": 17, "e_total_import_lo": 18,   # float32 → Wh ÷1000 = kWh
-    # Extended 32-bit active power (signed int32)
+    # Compact int16 active-power readings (offsets 5–9)
+    "meter_p1":   5,   # L1 Active power (signed int16, W)
+    "meter_p2":   6,   # L2 Active power (signed int16, W)
+    "meter_p3":   7,   # L3 Active power (signed int16, W)
+    "meter_p":    8,   # Total active power (signed int16, W)
+    "meter_q":    9,   # Reactive power total (signed int16, var)
+    "meter_pf":  13,   # Power factor (signed int16, ×0.001)
+    "meter_freq": 14,  # Frequency (u16, ×0.01 Hz)
+    # Energy counters stored as IEEE 754 float32 (big-endian word order).
+    # The float32 value is already in kWh — no further scaling required.
+    "e_total_export_hi": 15, "e_total_export_lo": 16,
+    "e_total_import_hi": 17, "e_total_import_lo": 18,
+    # Extended 32-bit active-power total (signed int32)
     "meter_p_total_hi": 25, "meter_p_total_lo": 26,
+}
+
+# Block C – BMS / battery pack data (offsets relative to 37000)
+_C = {
+    "battery_soc": 7,  # Battery State of Charge (%, register 37007)
 }
 
 _MAX_PV_W      = 30_000
@@ -130,6 +161,14 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
             address=_BLOCK_B_START, count=_BLOCK_B_COUNT, device_id=unit_id)
         b = rr_b.registers if not rr_b.isError() else None
 
+        rr_c = client.read_holding_registers(
+            address=_BLOCK_C_START, count=_BLOCK_C_COUNT, device_id=unit_id)
+        if rr_c.isError():
+            _LOGGER.debug("Block C (BMS) not available from %s: %s", host, rr_c)
+            c = None
+        else:
+            c = rr_c.registers
+
     except ModbusException as exc:
         _LOGGER.error("ModbusException from %s: %s", host, exc)
         return None
@@ -140,29 +179,32 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
         return b[_B[key]] if b else 0
 
     def _rb_grid_w(key: str) -> Optional[float]:
-        """Read a signed int16 grid-power register; returns None when Block B is absent."""
-        return _clamp(float(_s16(rb(key))), _MAX_GRID_W) if b else None
+        """Read a signed int16 grid-power register from Block B.
 
-    ppv1 = _clamp(float(a[_A["ppv1"]]), _MAX_PV_W)
-    ppv2 = _clamp(float(a[_A["ppv2"]]), _MAX_PV_W)
-    ppv3 = _clamp(float(a[_A["ppv3"]]), _MAX_PV_W)
-    ppv4 = _clamp(float(a[_A["ppv4"]]), _MAX_PV_W)
+        Negated so the HA convention holds: positive = import, negative = export.
+        Returns None when Block B is absent.
+        """
+        return _clamp(-float(_s16(rb(key))), _MAX_GRID_W) if b else None
+
+    ppv1 = _clamp(float(_u32(a[_A["ppv1_hi"]], a[_A["ppv1_lo"]])), _MAX_PV_W)
+    ppv2 = _clamp(float(_u32(a[_A["ppv2_hi"]], a[_A["ppv2_lo"]])), _MAX_PV_W)
+    ppv3 = _clamp(float(_u32(a[_A["ppv3_hi"]], a[_A["ppv3_lo"]])), _MAX_PV_W)
+    ppv4 = _clamp(float(_u32(a[_A["ppv4_hi"]], a[_A["ppv4_lo"]])), _MAX_PV_W)
     pv_total = sum(p for p in (ppv1, ppv2, ppv3, ppv4) if p is not None)
 
-    # External meter readings from Block B (None when Block B unavailable)
+    # Battery power: signed int32 (+ = discharging into house, − = charging)
+    bat_power = _clamp(float(_s32(a[_A["pbattery_hi"]], a[_A["pbattery_lo"]])), _MAX_BAT_W)
+
+    # External meter: total active power as signed int32, negated for HA convention
     meter_p_total32 = (
-        _clamp(float(_s32(rb("meter_p_total_hi"), rb("meter_p_total_lo"))), _MAX_GRID_W)
+        _clamp(-float(_s32(rb("meter_p_total_hi"), rb("meter_p_total_lo"))), _MAX_GRID_W)
         if b else None
     )
 
-    # The energy registers at offsets 15–18 contain IEEE 754 float32 values
-    # whose raw unit is Wh (divide by 1000 to obtain kWh).  This matches the
-    # encoding documented in the marcelblijleven/goodwe reference library.
-    # Note: these sensors do not have monotonic guards; the firmware counter
-    # may reset at midnight for daily values, so TOTAL_INCREASING semantics
-    # rely on HA's own long-term statistics correction.
-    meter_exp_kwh = _f32(rb("e_total_export_hi"), rb("e_total_export_lo")) / 1000.0 if b else None
-    meter_imp_kwh = _f32(rb("e_total_import_hi"), rb("e_total_import_lo")) / 1000.0 if b else None
+    # External meter energy totals: float32 registers whose value is already in kWh
+    # (confirmed by the reference implementation — no additional scaling required).
+    meter_exp_kwh = _f32(rb("e_total_export_hi"), rb("e_total_export_lo")) if b else None
+    meter_imp_kwh = _f32(rb("e_total_import_hi"), rb("e_total_import_lo")) if b else None
 
     return {
         "pv1_voltage_v":   a[_A["vpv1"]] * 0.1,
@@ -180,20 +222,22 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
         "pv_power_w":      pv_total,
         "grid_voltage_v":  a[_A["vgrid_r"]] * 0.1,
         "grid_frequency_hz": a[_A["fgrid_r"]] * 0.01,
-        "grid_power_r_w":  _clamp(float(_s16(a[_A["pgrid_r"]])), _MAX_GRID_W),
-        "grid_power_s_w":  _clamp(float(_s16(a[_A["pgrid_s"]])), _MAX_GRID_W),
-        "grid_power_t_w":  _clamp(float(_s16(a[_A["pgrid_t"]])), _MAX_GRID_W),
-        "grid_power_w":    _clamp(float(_s16(a[_A["pgrid_total"]])), _MAX_GRID_W),
-        "battery_power_w": _clamp(float(_s16(a[_A["pbattery"]])), _MAX_BAT_W),
-        "battery_soc_pct": float(a[_A["soc"]]),
-        "load_power_w":    _clamp(float(a[_A["pload"]]), _MAX_LOAD_W),
-        "inverter_temp_c": a[_A["temperature"]] * 0.1,
-        "pv_energy_today_kwh":        _u32(a[_A["e_day_pv"]],        a[_A["e_day_pv"] + 1])        * 0.1,
-        "pv_energy_total_kwh":        _u32(a[_A["e_total_pv"]],      a[_A["e_total_pv"] + 1])      * 0.1,
-        "battery_charge_today_kwh":   _u32(a[_A["e_day_charge"]],    a[_A["e_day_charge"] + 1])    * 0.1,
-        "battery_discharge_today_kwh":_u32(a[_A["e_day_discharge"]], a[_A["e_day_discharge"] + 1]) * 0.1,
-        "grid_export_total_kwh": _u32(rb("e_total_export_hi"), rb("e_total_export_lo")) * 0.1,
-        "grid_import_total_kwh": _u32(rb("e_total_import_hi"), rb("e_total_import_lo")) * 0.1,
+        # Grid power: negated — GoodWe positive = export; HA positive = import
+        "grid_power_r_w":  _clamp(-float(_s16(a[_A["pgrid_r"]])),     _MAX_GRID_W),
+        "grid_power_s_w":  _clamp(-float(_s16(a[_A["pgrid_s"]])),     _MAX_GRID_W),
+        "grid_power_t_w":  _clamp(-float(_s16(a[_A["pgrid_t"]])),     _MAX_GRID_W),
+        "grid_power_w":    _clamp(-float(_s16(a[_A["pgrid_total"]])), _MAX_GRID_W),
+        "battery_power_w": bat_power,
+        "battery_soc_pct": float(c[_C["battery_soc"]]) if c else None,
+        "load_power_w":    _clamp(float(_s16(a[_A["pload"]])), _MAX_LOAD_W),
+        "inverter_temp_c": _s16(a[_A["temperature"]]) * 0.1,
+        "pv_energy_today_kwh":        _u32(a[_A["e_day_pv_hi"]],    a[_A["e_day_pv_lo"]])    * 0.1,
+        "pv_energy_total_kwh":        _u32(a[_A["e_total_pv_hi"]],  a[_A["e_total_pv_lo"]]) * 0.1,
+        "battery_charge_today_kwh":   a[_A["e_bat_charge_day"]]    * 0.1,
+        "battery_discharge_today_kwh": a[_A["e_bat_discharge_day"]] * 0.1,
+        # Inverter-side export/import totals (Block A, u32, ÷10 = kWh)
+        "grid_export_total_kwh": _u32(a[_A["e_total_export_hi"]], a[_A["e_total_export_lo"]]) * 0.1,
+        "grid_import_total_kwh": _u32(a[_A["e_total_import_hi"]], a[_A["e_total_import_lo"]]) * 0.1,
         "work_mode": a[_A["work_mode"]],
         # ── External meter (Block B) ──────────────────────────────────────────
         "meter_power_r_w":      _rb_grid_w("meter_p1"),
@@ -202,7 +246,7 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
         "meter_power_w":        _rb_grid_w("meter_p"),
         "meter_power_total_w":  meter_p_total32,
         "meter_frequency_hz":   rb("meter_freq") * 0.01 if b else None,
-        "meter_power_factor":   rb("meter_pf") * 0.001 if b else None,
+        "meter_power_factor":   _s16(rb("meter_pf")) * 0.001 if b else None,
         "meter_export_total_kwh": meter_exp_kwh,
         "meter_import_total_kwh": meter_imp_kwh,
     }
