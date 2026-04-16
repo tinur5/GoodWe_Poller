@@ -54,7 +54,7 @@ async def _test_connection(hass: HomeAssistant, host: str, port: int,
             raise CannotConnect(f"Cannot reach {host}:{port}")
         try:
             rr = client.read_holding_registers(
-                address=35100, count=10, slave=unit_id)
+                address=35100, count=10, device_id=unit_id)
             if rr.isError():
                 raise CannotConnect(f"Modbus error from {host}: {rr}")
         except ModbusException as exc:
