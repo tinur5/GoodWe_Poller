@@ -65,9 +65,11 @@ _B = {
     "meter_q":     9,   # Reactive power total (signed int16, var)
     "meter_pf":   13,   # Power factor (×0.001)
     "meter_freq": 14,   # Frequency (×0.01 Hz)
-    # External meter – energy counters stored as IEEE 754 float32 (hi=first reg)
-    "e_total_export_hi": 15, "e_total_export_lo": 16,   # kWh (÷1000 via float32)
-    "e_total_import_hi": 17, "e_total_import_lo": 18,   # kWh (÷1000 via float32)
+    # External meter – energy counters.  Stored as IEEE 754 float32 (big-endian
+    # word order); raw unit is Wh, divide by 1000 to get kWh.  See also the
+    # marcelblijleven/goodwe reference library (Float type, scale=1000).
+    "e_total_export_hi": 15, "e_total_export_lo": 16,   # float32 → Wh ÷1000 = kWh
+    "e_total_import_hi": 17, "e_total_import_lo": 18,   # float32 → Wh ÷1000 = kWh
     # Extended 32-bit active power (signed int32)
     "meter_p_total_hi": 25, "meter_p_total_lo": 26,
 }
@@ -138,6 +140,10 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
     def rb(key: str) -> int:
         return b[_B[key]] if b else 0
 
+    def _rb_grid_w(key: str) -> Optional[float]:
+        """Read a signed int16 grid-power register; returns None when Block B is absent."""
+        return _clamp(float(_s16(rb(key))), _MAX_GRID_W) if b else None
+
     ppv1 = _clamp(float(a[_A["ppv1"]]), _MAX_PV_W)
     ppv2 = _clamp(float(a[_A["ppv2"]]), _MAX_PV_W)
     ppv3 = _clamp(float(a[_A["ppv3"]]), _MAX_PV_W)
@@ -145,14 +151,19 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
     pv_total = sum(p for p in (ppv1, ppv2, ppv3, ppv4) if p is not None)
 
     # External meter readings from Block B (None when Block B unavailable)
-    meter_p1 = _clamp(float(_s16(rb("meter_p1"))), _MAX_GRID_W) if b else None
-    meter_p2 = _clamp(float(_s16(rb("meter_p2"))), _MAX_GRID_W) if b else None
-    meter_p3 = _clamp(float(_s16(rb("meter_p3"))), _MAX_GRID_W) if b else None
-    meter_p  = _clamp(float(_s16(rb("meter_p"))),  _MAX_GRID_W) if b else None
     meter_p_total32 = (
         _clamp(float(_s32(rb("meter_p_total_hi"), rb("meter_p_total_lo"))), _MAX_GRID_W)
         if b else None
     )
+
+    # The energy registers at offsets 15–18 contain IEEE 754 float32 values
+    # whose raw unit is Wh (divide by 1000 to obtain kWh).  This matches the
+    # encoding documented in the marcelblijleven/goodwe reference library.
+    # Note: these sensors do not have monotonic guards; the firmware counter
+    # may reset at midnight for daily values, so TOTAL_INCREASING semantics
+    # rely on HA's own long-term statistics correction.
+    meter_exp_kwh = _f32(rb("e_total_export_hi"), rb("e_total_export_lo")) / 1000.0 if b else None
+    meter_imp_kwh = _f32(rb("e_total_import_hi"), rb("e_total_import_lo")) / 1000.0 if b else None
 
     return {
         "pv1_voltage_v":   a[_A["vpv1"]] * 0.1,
@@ -186,15 +197,15 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
         "grid_import_total_kwh": _u32(rb("e_total_import_hi"), rb("e_total_import_lo")) * 0.1,
         "work_mode": a[_A["work_mode"]],
         # ── External meter (Block B) ──────────────────────────────────────────
-        "meter_power_r_w":      meter_p1,
-        "meter_power_s_w":      meter_p2,
-        "meter_power_t_w":      meter_p3,
-        "meter_power_w":        meter_p,
+        "meter_power_r_w":      _rb_grid_w("meter_p1"),
+        "meter_power_s_w":      _rb_grid_w("meter_p2"),
+        "meter_power_t_w":      _rb_grid_w("meter_p3"),
+        "meter_power_w":        _rb_grid_w("meter_p"),
         "meter_power_total_w":  meter_p_total32,
         "meter_frequency_hz":   rb("meter_freq") * 0.01 if b else None,
         "meter_power_factor":   rb("meter_pf") * 0.001 if b else None,
-        "meter_export_total_kwh": _f32(rb("e_total_export_hi"), rb("e_total_export_lo")) if b else None,
-        "meter_import_total_kwh": _f32(rb("e_total_import_hi"), rb("e_total_import_lo")) if b else None,
+        "meter_export_total_kwh": meter_exp_kwh,
+        "meter_import_total_kwh": meter_imp_kwh,
     }
 
 
