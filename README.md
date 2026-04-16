@@ -1,118 +1,81 @@
-# GoodWe Poller (Modbus → MQTT → Home Assistant)
+# GoodWe Modbus – Home Assistant Custom Integration
 
 ## Overview
 
-This project reads data from GoodWe hybrid inverters (ET/EH/BT/BH series) via Modbus TCP and publishes structured metrics to MQTT.
+Liest Daten von GoodWe Hybrid-Wechselrichtern (ET/EH/BT/BH-Serie) direkt via
+**Modbus TCP** und stellt alle Werte als native **Home Assistant Sensoren** bereit.
 
-It is designed for:
+Kein MQTT-Broker, kein externer Dienst – der Wechselrichter wird direkt aus HA heraus abgefragt.
 
-* Home Assistant integration
-* Multi-inverter setups (master + slave)
-* Reliable energy monitoring with filtering and validation
+## Unterstützte Sensoren
 
-## Features
+| Sensor | Einheit | Beschreibung |
+|--------|---------|--------------|
+| PV Power Total | W | Gesamte PV-Leistung |
+| PV1–4 Power / Voltage / Current | W / V / A | Einzelne PV-Strings |
+| Battery Power | W | Ladeleistung (+ = laden, − = entladen) |
+| Battery SOC | % | Ladestand |
+| Battery Charged/Discharged Today | kWh | Tagesenergie Batterie |
+| Grid Power | W | Netzleistung (+ = Einspeisung, − = Bezug) |
+| Grid Voltage / Frequency | V / Hz | Netzspannung und -frequenz |
+| Grid Export / Import Total | kWh | Gesamte Netzenergie |
+| Load Power | W | Hausverbrauch |
+| PV Energy Today / Total | kWh | PV-Energie |
+| Inverter Temperature | °C | Wechselrichter-Temperatur |
 
-* Reads Modbus registers (35100 / 36000 blocks)
-* Supports master + slave inverter aggregation
-* Publishes clean MQTT topics
-* Built-in spike filtering (PV, battery, grid)
-* Handles invalid / corrupted register values
-* Grid import/export energy via external meter (ARM registers)
+## Voraussetzungen
 
-## Supported Data
-
-* PV power and energy
-* Battery power, charge/discharge energy
-* Grid power (filtered)
-* Grid import/export energy
-* Load calculation
-
-## Requirements
-
-* Python 3.10+
-* MQTT broker (e.g. Mosquitto)
-* GoodWe inverter with Modbus TCP enabled
+* Home Assistant 2024.1 oder neuer
+* GoodWe-Wechselrichter mit aktiviertem Modbus TCP
+* Wechselrichter im gleichen Netzwerk wie Home Assistant erreichbar
 
 ## Installation
 
-```bash
-git clone https://github.com/YOURNAME/goodwe-poller.git
-cd goodwe-poller
-pip install -r requirements.txt
-```
+1. Ordner `custom_components/goodwe_modbus/` in dein HA-Konfigurationsverzeichnis kopieren:
+   ```
+   config/
+   └── custom_components/
+       └── goodwe_modbus/   ← diesen Ordner kopieren
+   ```
+2. Home Assistant neu starten.
+3. In HA: **Einstellungen → Geräte & Dienste → Integration hinzufügen → GoodWe Modbus**
+4. IP-Adresse des Wechselrichters eingeben, Verbindung wird automatisch geprüft.
 
-## Configuration
+## Konfigurationsoptionen
 
-Create a `.env` file:
+| Feld | Standard | Beschreibung |
+|------|----------|--------------|
+| Master IP | – | IP-Adresse des Haupt-Wechselrichters |
+| Slave IP | (leer) | Zweiter Wechselrichter (optional, wird summiert) |
+| Modbus Port | 502 | TCP-Port |
+| Unit ID | 247 | Modbus Unit-ID (GoodWe-Standard: 247) |
+| Abfrage-Intervall | 10 s | Wie oft HA die Daten aktualisiert |
 
-```env
-MQTT_HOST=localhost
-MQTT_PORT=1883
-MQTT_USERNAME=
-MQTT_PASSWORD=
+## Multi-Wechselrichter
 
-MASTER_HOST=192.168.1.10
-SLAVE_HOST=192.168.1.11
+Wenn ein zweiter Wechselrichter angegeben wird, werden:
+- **Leistungswerte** aufsummiert
+- **Energiezähler** aufsummiert
+- **SOC** gemittelt
+- **Temperatur** als Maximum angezeigt
+- **Spannung / Frequenz** vom Master übernommen
 
-MODBUS_UNIT_ID=247
-POLL_INTERVAL=10
-BASE_TOPIC=goodwe_direct
-```
+## Filterlogik
 
-## Run
+- **Spike-Filter**: Ausreißer werden anhand des gleitenden Medians erkannt und verworfen
+- **Deadband**: Netzleistung < 30 W wird auf 0 gesetzt (verhindert Jitter im Leerlauf)
+- **Monotonie-Guard**: Energiezähler werden bei unplausiblen Rücksprüngen eingefroren
 
-```bash
-python main.py
-```
+## Unterstützte Register
 
-## MQTT Topics
-
-Base topic:
-
-```
-goodwe_direct/total/decoded/
-```
-
-Examples:
-
-* `pv_power_total_w`
-* `battery_power_total_w`
-* `grid_power_total_w`
-* `grid_import_energy_total_kwh`
-* `grid_export_energy_total_kwh`
-
-## Register Mapping
-
-Main sources:
-
-* 35100 → inverter runtime data
-* 36000 → external meter (ARM communication)
-
-Grid energy:
-
-* 36015 → total export (kWh)
-* 36017 → total import (kWh)
-
-## Filtering Logic
-
-To improve stability:
-
-* Spike filtering for PV, battery and grid
-* Deadband around 0W for grid
-* Maximum limits to avoid corrupted values
-* Monotonic validation for energy counters
-
-## Known Issues
-
-* External meter values may be unavailable depending on inverter setup
-* Some installations require fallback to inverter-based energy counters
-* Modbus responses can contain spikes or invalid data
+- Block 35100–35199: Laufzeitdaten (PV, Batterie, Netz, Last)
+- Block 36000–36049: ARM-Kommunikation (Netz-Energiezähler)
 
 ## Disclaimer
 
-This project is not affiliated with GoodWe.
-Use at your own risk.
+Dieses Projekt steht in keiner Verbindung mit GoodWe. Verwendung auf eigene Gefahr.
 
-## License
+## Lizenz
 
 MIT License
+
