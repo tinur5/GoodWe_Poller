@@ -3,16 +3,14 @@
     "step": {
       "user": {
         "title": "Set up GoodWe Inverter",
-        "description": "Enter the Modbus TCP connection details of your GoodWe inverter.",
+        "description": "Enter the Modbus TCP connection details of your GoodWe inverter. To monitor multiple inverters, add this integration once per inverter.",
         "data": {
-          "master_host": "Master inverter IP address",
-          "slave_host": "Slave inverter IP address (optional)",
+          "host": "Inverter IP address",
           "modbus_port": "Modbus port",
           "unit_id": "Modbus unit ID",
           "scan_interval": "Poll interval (seconds)"
         },
         "data_description": {
-          "slave_host": "Leave empty for single-inverter setups.",
           "unit_id": "Default GoodWe unit ID is 247."
         }
       }

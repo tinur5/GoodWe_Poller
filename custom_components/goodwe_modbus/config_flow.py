@@ -8,14 +8,12 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
-from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import (
     DOMAIN,
-    CONF_MASTER_HOST,
-    CONF_SLAVE_HOST,
+    CONF_HOST,
     CONF_MODBUS_PORT,
     CONF_UNIT_ID,
     DEFAULT_PORT,
@@ -27,8 +25,7 @@ _LOGGER = logging.getLogger(__name__)
 
 STEP_USER_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_MASTER_HOST): str,
-        vol.Optional(CONF_SLAVE_HOST, default=""): str,
+        vol.Required(CONF_HOST): str,
         vol.Optional(CONF_MODBUS_PORT, default=DEFAULT_PORT): vol.All(
             int, vol.Range(min=1, max=65535)
         ),
@@ -76,16 +73,16 @@ class GoodWeModbusConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            master_host = user_input[CONF_MASTER_HOST].strip()
-            port        = user_input[CONF_MODBUS_PORT]
-            unit_id     = user_input[CONF_UNIT_ID]
+            host    = user_input[CONF_HOST].strip()
+            port    = user_input[CONF_MODBUS_PORT]
+            unit_id = user_input[CONF_UNIT_ID]
 
             # Prevent duplicate entries for the same inverter
-            await self.async_set_unique_id(f"{master_host}:{port}:{unit_id}")
+            await self.async_set_unique_id(f"{host}:{port}:{unit_id}")
             self._abort_if_unique_id_configured()
 
             try:
-                await _test_connection(self.hass, master_host, port, unit_id)
+                await _test_connection(self.hass, host, port, unit_id)
             except CannotConnect:
                 errors["base"] = "cannot_connect"
             except Exception:
@@ -93,10 +90,9 @@ class GoodWeModbusConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "unknown"
             else:
                 return self.async_create_entry(
-                    title=f"GoodWe @ {master_host}",
+                    title=f"GoodWe @ {host}",
                     data={
-                        CONF_MASTER_HOST:   master_host,
-                        CONF_SLAVE_HOST:    user_input.get(CONF_SLAVE_HOST, "").strip(),
+                        CONF_HOST:          host,
                         CONF_MODBUS_PORT:   port,
                         CONF_UNIT_ID:       unit_id,
                         CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL],

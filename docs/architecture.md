@@ -114,27 +114,13 @@ goodwe_direct/total/decoded/inverter_temp_c
    Rejects counter decreases that are not large enough to be a true rollover.  
    Applied per inverter *before* summation.
 
-## Multi-Inverter Mode
-
-Set `SLAVE_HOST` in `.env` to enable a second inverter.
-
-- **Power values** → summed (master + slave)
-- **SOC** → averaged
-- **Temperature** → maximum
-- **Voltage / frequency** → master only
-- **Energy** → summed (each inverter's counters pass through its own MonotonicGuard first)
-
 ## Home Assistant Devices (HA custom integration)
 
-When both a master and a slave are configured, three HA devices are created
-under a single config entry:
+Each config entry represents **one inverter** and creates a single HA device with
+all inverter and external meter sensors.
 
-| Device | Name suffix | Sensor data |
-|--------|-------------|-------------|
-| Combined | *(entry title)* | Summed/averaged values from all inverters + external meter |
-| Inverter 1 | `– Inverter 1` | Individual values from master only |
-| Inverter 2 | `– Inverter 2` | Individual values from slave only |
+To monitor multiple inverters, add this integration once per inverter via
+**Settings → Devices & Services → Add Integration**.
 
-The *Inverter 2* device is only created when a slave IP address is configured.
-External meter (Block B) sensors are on the combined device and are **disabled
+External meter (Block B) sensors are included on each device and are **disabled
 by default**; enable the ones you need in the HA entity settings.

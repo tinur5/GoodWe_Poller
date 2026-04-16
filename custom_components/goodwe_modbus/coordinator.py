@@ -21,8 +21,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .const import (
     DOMAIN,
-    CONF_MASTER_HOST,
-    CONF_SLAVE_HOST,
+    CONF_HOST,
     CONF_MODBUS_PORT,
     CONF_UNIT_ID,
     CONF_SCAN_INTERVAL,
@@ -245,14 +244,13 @@ class _MonotonicGuard:
 # ── Coordinator ───────────────────────────────────────────────────────────────
 
 class GoodWeCoordinator(DataUpdateCoordinator):
-    """Fetches and filters data from one or two GoodWe inverters."""
+    """Fetches and filters data from a single GoodWe inverter."""
 
     def __init__(self, hass: HomeAssistant, entry_data: dict) -> None:
-        self._master_host = entry_data[CONF_MASTER_HOST]
-        self._slave_host  = entry_data.get(CONF_SLAVE_HOST, "")
-        self._port        = entry_data.get(CONF_MODBUS_PORT, DEFAULT_PORT)
-        self._unit_id     = entry_data.get(CONF_UNIT_ID, DEFAULT_UNIT_ID)
-        interval          = entry_data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+        self._host    = entry_data[CONF_HOST]
+        self._port    = entry_data.get(CONF_MODBUS_PORT, DEFAULT_PORT)
+        self._unit_id = entry_data.get(CONF_UNIT_ID, DEFAULT_UNIT_ID)
+        interval      = entry_data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
 
         super().__init__(
             hass,
@@ -267,104 +265,27 @@ class GoodWeCoordinator(DataUpdateCoordinator):
         self._sf_grid = _SpikeFilter(max_delta=10_000)
         self._sf_load = _SpikeFilter(max_delta=10_000)
 
-        # Per-inverter monotonic energy guards
-        self._mono_m = {k: _MonotonicGuard() for k in (
+        # Monotonic energy guards
+        self._mono = {k: _MonotonicGuard() for k in (
             "pv_energy_total_kwh", "grid_export_total_kwh", "grid_import_total_kwh")}
-        self._mono_s = {k: _MonotonicGuard() for k in (
-            "pv_energy_total_kwh", "grid_export_total_kwh", "grid_import_total_kwh")}
-
-        # Raw per-inverter data – populated each update cycle
-        self.master_data: Optional[dict] = None
-        self.slave_data: Optional[dict] = None
-
-    @property
-    def has_slave(self) -> bool:
-        """True when a second (slave) inverter is configured."""
-        return bool(self._slave_host)
 
     async def _async_update_data(self) -> dict:
-        master = await self.hass.async_add_executor_job(
-            _read_inverter, self._master_host, self._port, self._unit_id
+        data = await self.hass.async_add_executor_job(
+            _read_inverter, self._host, self._port, self._unit_id
         )
 
-        slave: Optional[dict] = None
-        if self._slave_host:
-            slave = await self.hass.async_add_executor_job(
-                _read_inverter, self._slave_host, self._port, self._unit_id
-            )
+        if data is None:
+            raise UpdateFailed(f"No data received from inverter at {self._host}")
 
-        if master is None and slave is None:
-            raise UpdateFailed("No data received from any inverter")
-
-        # Apply monotonic guards per inverter before summing
-        if master:
-            for key, guard in self._mono_m.items():
-                master[key] = guard(master.get(key))
-        if slave:
-            for key, guard in self._mono_s.items():
-                slave[key] = guard(slave.get(key))
-
-        # Store raw per-inverter snapshots so sensor entities can read them
-        self.master_data = master
-        self.slave_data  = slave
-
-        combined = _combine(master, slave)
+        # Apply monotonic guards
+        for key, guard in self._mono.items():
+            data[key] = guard(data.get(key))
 
         # Apply output spike filters
-        combined["pv_power_w"]      = self._sf_pv(combined.get("pv_power_w"))
-        combined["battery_power_w"] = self._sf_bat(combined.get("battery_power_w"))
-        grid = self._sf_grid(combined.get("grid_power_w"))
-        combined["grid_power_w"]    = 0.0 if grid is not None and abs(grid) < 30 else grid
-        combined["load_power_w"]    = self._sf_load(combined.get("load_power_w"))
+        data["pv_power_w"]      = self._sf_pv(data.get("pv_power_w"))
+        data["battery_power_w"] = self._sf_bat(data.get("battery_power_w"))
+        grid = self._sf_grid(data.get("grid_power_w"))
+        data["grid_power_w"]    = 0.0 if grid is not None and abs(grid) < 30 else grid
+        data["load_power_w"]    = self._sf_load(data.get("load_power_w"))
 
-        return combined
-
-
-# ── Merge master + slave ──────────────────────────────────────────────────────
-
-_SUM_KEYS = frozenset({
-    "pv_power_w",
-    "pv1_power_w", "pv2_power_w", "pv3_power_w", "pv4_power_w",
-    "battery_power_w",
-    "grid_power_w", "grid_power_r_w", "grid_power_s_w", "grid_power_t_w",
-    "load_power_w",
-    "pv_energy_today_kwh", "pv_energy_total_kwh",
-    "battery_charge_today_kwh", "battery_discharge_today_kwh",
-    "grid_export_total_kwh", "grid_import_total_kwh",
-})
-
-
-def _add(a: Optional[float], b: Optional[float]) -> Optional[float]:
-    if a is None and b is None:
-        return None
-    return (a or 0.0) + (b or 0.0)
-
-
-def _avg(a: Optional[float], b: Optional[float]) -> Optional[float]:
-    if a is None and b is None:
-        return None
-    if a is None:
-        return b
-    if b is None:
-        return a
-    return (a + b) / 2.0
-
-
-def _combine(master: Optional[dict], slave: Optional[dict]) -> dict:
-    base = master if master is not None else slave
-    out: dict = {}
-    for key in base:
-        mv = master.get(key) if master else None
-        sv = slave.get(key)  if slave  else None
-        if key in _SUM_KEYS:
-            out[key] = _add(mv, sv)
-        elif key == "battery_soc_pct":
-            out[key] = _avg(mv, sv)
-        elif key == "inverter_temp_c":
-            if mv is not None and sv is not None:
-                out[key] = max(mv, sv)
-            else:
-                out[key] = mv if mv is not None else sv
-        else:
-            out[key] = mv  # master wins (voltage, frequency, work_mode)
-    return out
+        return data
