@@ -69,10 +69,18 @@ GoodWe Inverter(s)          Python Poller              MQTT Broker
 
 ### Block B – ARM external meter (36000 … 36049)
 
-| Offset | Name | Scale | Unit |
-|--------|------|-------|------|
-| +15–16 | E_total export (32-bit hi+lo) | ×0.1 | kWh |
-| +17–18 | E_total import (32-bit hi+lo) | ×0.1 | kWh |
+| Offset | Name | Scale / Type | Unit |
+|--------|------|--------------|------|
+| +5 | Meter active power L1 | int16 signed | W |
+| +6 | Meter active power L2 | int16 signed | W |
+| +7 | Meter active power L3 | int16 signed | W |
+| +8 | Meter active power total | int16 signed | W |
+| +9 | Meter reactive power total | int16 signed | var |
+| +13 | Meter power factor | ×0.001 | – |
+| +14 | Meter frequency | ×0.01 | Hz |
+| +15–16 | E_total export (float32 hi+lo) | IEEE 754 float | kWh |
+| +17–18 | E_total import (float32 hi+lo) | IEEE 754 float | kWh |
+| +25–26 | Meter active power total (32-bit) | int32 signed | W |
 
 ## MQTT Topics
 
@@ -115,3 +123,18 @@ Set `SLAVE_HOST` in `.env` to enable a second inverter.
 - **Temperature** → maximum
 - **Voltage / frequency** → master only
 - **Energy** → summed (each inverter's counters pass through its own MonotonicGuard first)
+
+## Home Assistant Devices (HA custom integration)
+
+When both a master and a slave are configured, three HA devices are created
+under a single config entry:
+
+| Device | Name suffix | Sensor data |
+|--------|-------------|-------------|
+| Combined | *(entry title)* | Summed/averaged values from all inverters + external meter |
+| Inverter 1 | `– Inverter 1` | Individual values from master only |
+| Inverter 2 | `– Inverter 2` | Individual values from slave only |
+
+The *Inverter 2* device is only created when a slave IP address is configured.
+External meter (Block B) sensors are on the combined device and are **disabled
+by default**; enable the ones you need in the HA entity settings.

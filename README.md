@@ -9,19 +9,38 @@ Kein MQTT-Broker, kein externer Dienst – der Wechselrichter wird direkt aus HA
 
 ## Unterstützte Sensoren
 
+### Kombinierte Sensoren (Gesamtsystem)
+
 | Sensor | Einheit | Beschreibung |
 |--------|---------|--------------|
-| PV Power Total | W | Gesamte PV-Leistung |
+| PV Power Total | W | Gesamte PV-Leistung (alle Wechselrichter) |
 | PV1–4 Power / Voltage / Current | W / V / A | Einzelne PV-Strings |
 | Battery Power | W | Ladeleistung (+ = laden, − = entladen) |
-| Battery SOC | % | Ladestand |
+| Battery SOC | % | Ladestand (Durchschnitt bei 2 WR) |
 | Battery Charged/Discharged Today | kWh | Tagesenergie Batterie |
 | Grid Power | W | Netzleistung (+ = Einspeisung, − = Bezug) |
 | Grid Voltage / Frequency | V / Hz | Netzspannung und -frequenz |
 | Grid Export / Import Total | kWh | Gesamte Netzenergie |
 | Load Power | W | Hausverbrauch |
 | PV Energy Today / Total | kWh | PV-Energie |
-| Inverter Temperature | °C | Wechselrichter-Temperatur |
+| Inverter Temperature | °C | Wechselrichter-Temperatur (Maximum) |
+
+### Externe Zähler-Sensoren (standardmäßig deaktiviert)
+
+| Sensor | Einheit | Beschreibung |
+|--------|---------|--------------|
+| Meter Active Power | W | Gesamtleistung ext. Zähler (int16) |
+| Meter Active Power L1/L2/L3 | W | Phasenleistung ext. Zähler |
+| Meter Active Power Total (32-bit) | W | Gesamtleistung ext. Zähler (int32, höherer Messbereich) |
+| Meter Frequency | Hz | Netzfrequenz am ext. Zähler |
+| Meter Power Factor | – | Leistungsfaktor ext. Zähler |
+| Meter Export / Import Total | kWh | Gesamte Netzenergie (float32-Darstellung des WR) |
+
+### Einzelne Wechselrichter (Geräte „Inverter 1" / „Inverter 2")
+
+Bei Konfiguration eines Slave-Wechselrichters werden zwei zusätzliche
+HA-Geräte angelegt. Jeder dieser Geräte stellt alle oben genannten
+Leistungs- und Energiesensoren für den jeweiligen Wechselrichter einzeln bereit.
 
 ## Voraussetzungen
 
@@ -53,12 +72,22 @@ Kein MQTT-Broker, kein externer Dienst – der Wechselrichter wird direkt aus HA
 
 ## Multi-Wechselrichter
 
-Wenn ein zweiter Wechselrichter angegeben wird, werden:
-- **Leistungswerte** aufsummiert
-- **Energiezähler** aufsummiert
-- **SOC** gemittelt
-- **Temperatur** als Maximum angezeigt
-- **Spannung / Frequenz** vom Master übernommen
+Wenn ein zweiter Wechselrichter (Slave IP) angegeben wird, werden:
+
+- **Leistungswerte** aufsummiert (kombiniertes Gerät)
+- **Energiezähler** aufsummiert (kombiniertes Gerät)
+- **SOC** gemittelt (kombiniertes Gerät)
+- **Temperatur** als Maximum angezeigt (kombiniertes Gerät)
+- **Spannung / Frequenz** vom Master übernommen (kombiniertes Gerät)
+
+Zusätzlich werden automatisch zwei Untergeräte angelegt:
+
+| Gerät | Name | Inhalt |
+|-------|------|--------|
+| Inverter 1 | `<Name> – Inverter 1` | Alle Werte nur für Wechselrichter 1 |
+| Inverter 2 | `<Name> – Inverter 2` | Alle Werte nur für Wechselrichter 2 |
+
+So sind die Daten beider Wechselrichter einzeln sichtbar.
 
 ## Filterlogik
 
@@ -69,7 +98,7 @@ Wenn ein zweiter Wechselrichter angegeben wird, werden:
 ## Unterstützte Register
 
 - Block 35100–35199: Laufzeitdaten (PV, Batterie, Netz, Last)
-- Block 36000–36049: ARM-Kommunikation (Netz-Energiezähler)
+- Block 36000–36049: ARM-Kommunikation (Netz-Energiezähler + ext. Zähler)
 
 ## Disclaimer
 
