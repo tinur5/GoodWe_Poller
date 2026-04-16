@@ -3,16 +3,14 @@
     "step": {
       "user": {
         "title": "GoodWe Wechselrichter einrichten",
-        "description": "Gib die Modbus-TCP-Verbindungsdaten deines GoodWe-Wechselrichters ein.",
+        "description": "Gib die Modbus-TCP-Verbindungsdaten deines GoodWe-Wechselrichters ein. Um mehrere Wechselrichter zu überwachen, füge diese Integration für jeden Wechselrichter einmal hinzu.",
         "data": {
-          "master_host": "IP-Adresse Master-Wechselrichter",
-          "slave_host": "IP-Adresse Slave-Wechselrichter (optional)",
+          "host": "IP-Adresse des Wechselrichters",
           "modbus_port": "Modbus-Port",
           "unit_id": "Modbus Unit-ID",
           "scan_interval": "Abfrage-Intervall (Sekunden)"
         },
         "data_description": {
-          "slave_host": "Leer lassen, wenn nur ein Wechselrichter vorhanden ist.",
           "unit_id": "Standard-ID für GoodWe-Wechselrichter ist 247."
         }
       }
