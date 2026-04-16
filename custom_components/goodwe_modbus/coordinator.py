@@ -96,14 +96,14 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
 
     try:
         rr_a = client.read_holding_registers(
-            address=_BLOCK_A_START, count=_BLOCK_A_COUNT, slave=unit_id)
+            address=_BLOCK_A_START, count=_BLOCK_A_COUNT, device_id=unit_id)
         if rr_a.isError():
             _LOGGER.warning("Modbus error (block A) from %s: %s", host, rr_a)
             return None
         a = rr_a.registers
 
         rr_b = client.read_holding_registers(
-            address=_BLOCK_B_START, count=_BLOCK_B_COUNT, slave=unit_id)
+            address=_BLOCK_B_START, count=_BLOCK_B_COUNT, device_id=unit_id)
         b = rr_b.registers if not rr_b.isError() else None
 
     except ModbusException as exc:
