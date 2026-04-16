@@ -95,9 +95,12 @@ GoodWe Inverter(s)          Python Poller              MQTT Broker
 | 36017–36018 | +17–18 | E_total import (float32) | float32 | – | kWh |
 | 36025–36026 | +25–26 | Meter active power total (32-bit) | s32 | ×1 | W |
 
-> **Sign convention (Blocks A & B):** GoodWe reports positive = export to grid.
+> **Grid sign convention (Blocks A & B):** GoodWe reports positive = export to grid.
 > The integration **negates** all grid-power values so HA convention applies:
 > **positive = import from grid, negative = export to grid.**
+
+> **Battery sign convention (Block A pbattery / Block C):** positive = discharging
+> (contributing to house load), negative = charging. No negation is applied.
 
 ### Block C – BMS / battery pack data (37000 … 37007)
 

@@ -163,7 +163,11 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
 
         rr_c = client.read_holding_registers(
             address=_BLOCK_C_START, count=_BLOCK_C_COUNT, device_id=unit_id)
-        c = rr_c.registers if not rr_c.isError() else None
+        if rr_c.isError():
+            _LOGGER.debug("Block C (BMS) not available from %s: %s", host, rr_c)
+            c = None
+        else:
+            c = rr_c.registers
 
     except ModbusException as exc:
         _LOGGER.error("ModbusException from %s: %s", host, exc)
