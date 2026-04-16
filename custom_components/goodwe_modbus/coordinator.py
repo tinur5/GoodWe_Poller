@@ -109,6 +109,11 @@ _MAX_BAT_W     = 20_000
 _MAX_GRID_W    = 30_000
 _MAX_LOAD_W    = 30_000
 _MAX_ENERGY    = 999_999
+_MAX_PV_VOLT   = 1_000      # max plausible PV string voltage (V)
+_MAX_GRID_VOLT = 320        # max plausible AC grid voltage (V)
+_MAX_FREQ_HZ   = 65         # max plausible grid frequency (Hz)
+_MAX_TEMP_C    = 120        # inverter temp range: −120…120 °C (symmetric via _clamp)
+_MAX_SOC_PCT   = 100        # battery SOC is 0–100 %
 
 
 # ── Low-level helpers (run in executor) ───────────────────────────────────────
@@ -122,6 +127,7 @@ def _u32(hi: int, lo: int) -> int:
 
 
 def _clamp(value: float, max_abs: float) -> Optional[float]:
+    """Return *value* if it lies within [-max_abs, max_abs], else None."""
     return value if abs(value) <= max_abs else None
 
 
@@ -207,37 +213,37 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
     meter_imp_kwh = _f32(rb("e_total_import_hi"), rb("e_total_import_lo")) if b else None
 
     return {
-        "pv1_voltage_v":   a[_A["vpv1"]] * 0.1,
+        "pv1_voltage_v":   _clamp(a[_A["vpv1"]] * 0.1, _MAX_PV_VOLT),
         "pv1_current_a":   a[_A["ipv1"]] * 0.1,
         "pv1_power_w":     ppv1,
-        "pv2_voltage_v":   a[_A["vpv2"]] * 0.1,
+        "pv2_voltage_v":   _clamp(a[_A["vpv2"]] * 0.1, _MAX_PV_VOLT),
         "pv2_current_a":   a[_A["ipv2"]] * 0.1,
         "pv2_power_w":     ppv2,
-        "pv3_voltage_v":   a[_A["vpv3"]] * 0.1,
+        "pv3_voltage_v":   _clamp(a[_A["vpv3"]] * 0.1, _MAX_PV_VOLT),
         "pv3_current_a":   a[_A["ipv3"]] * 0.1,
         "pv3_power_w":     ppv3,
-        "pv4_voltage_v":   a[_A["vpv4"]] * 0.1,
+        "pv4_voltage_v":   _clamp(a[_A["vpv4"]] * 0.1, _MAX_PV_VOLT),
         "pv4_current_a":   a[_A["ipv4"]] * 0.1,
         "pv4_power_w":     ppv4,
         "pv_power_w":      pv_total,
-        "grid_voltage_v":  a[_A["vgrid_r"]] * 0.1,
-        "grid_frequency_hz": a[_A["fgrid_r"]] * 0.01,
+        "grid_voltage_v":  _clamp(a[_A["vgrid_r"]] * 0.1, _MAX_GRID_VOLT),
+        "grid_frequency_hz": _clamp(a[_A["fgrid_r"]] * 0.01, _MAX_FREQ_HZ),
         # Grid power: negated — GoodWe positive = export; HA positive = import
         "grid_power_r_w":  _clamp(-float(_s16(a[_A["pgrid_r"]])),     _MAX_GRID_W),
         "grid_power_s_w":  _clamp(-float(_s16(a[_A["pgrid_s"]])),     _MAX_GRID_W),
         "grid_power_t_w":  _clamp(-float(_s16(a[_A["pgrid_t"]])),     _MAX_GRID_W),
         "grid_power_w":    _clamp(-float(_s16(a[_A["pgrid_total"]])), _MAX_GRID_W),
         "battery_power_w": bat_power,
-        "battery_soc_pct": float(c[_C["battery_soc"]]) if c else None,
+        "battery_soc_pct": _clamp(float(c[_C["battery_soc"]]), _MAX_SOC_PCT) if c else None,
         "load_power_w":    _clamp(float(_s16(a[_A["pload"]])), _MAX_LOAD_W),
-        "inverter_temp_c": _s16(a[_A["temperature"]]) * 0.1,
-        "pv_energy_today_kwh":        _u32(a[_A["e_day_pv_hi"]],    a[_A["e_day_pv_lo"]])    * 0.1,
-        "pv_energy_total_kwh":        _u32(a[_A["e_total_pv_hi"]],  a[_A["e_total_pv_lo"]]) * 0.1,
-        "battery_charge_today_kwh":   a[_A["e_bat_charge_day"]]    * 0.1,
-        "battery_discharge_today_kwh": a[_A["e_bat_discharge_day"]] * 0.1,
+        "inverter_temp_c": _clamp(_s16(a[_A["temperature"]]) * 0.1, _MAX_TEMP_C),
+        "pv_energy_today_kwh":        _clamp(_u32(a[_A["e_day_pv_hi"]],    a[_A["e_day_pv_lo"]])    * 0.1, _MAX_ENERGY),
+        "pv_energy_total_kwh":        _clamp(_u32(a[_A["e_total_pv_hi"]],  a[_A["e_total_pv_lo"]]) * 0.1, _MAX_ENERGY),
+        "battery_charge_today_kwh":   _clamp(a[_A["e_bat_charge_day"]]    * 0.1, _MAX_ENERGY),
+        "battery_discharge_today_kwh": _clamp(a[_A["e_bat_discharge_day"]] * 0.1, _MAX_ENERGY),
         # Inverter-side export/import totals (Block A, u32, ÷10 = kWh)
-        "grid_export_total_kwh": _u32(a[_A["e_total_export_hi"]], a[_A["e_total_export_lo"]]) * 0.1,
-        "grid_import_total_kwh": _u32(a[_A["e_total_import_hi"]], a[_A["e_total_import_lo"]]) * 0.1,
+        "grid_export_total_kwh": _clamp(_u32(a[_A["e_total_export_hi"]], a[_A["e_total_export_lo"]]) * 0.1, _MAX_ENERGY),
+        "grid_import_total_kwh": _clamp(_u32(a[_A["e_total_import_hi"]], a[_A["e_total_import_lo"]]) * 0.1, _MAX_ENERGY),
         "work_mode": a[_A["work_mode"]],
         # ── External meter (Block B) ──────────────────────────────────────────
         "meter_power_r_w":      _rb_grid_w("meter_p1"),
@@ -245,10 +251,10 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
         "meter_power_t_w":      _rb_grid_w("meter_p3"),
         "meter_power_w":        _rb_grid_w("meter_p"),
         "meter_power_total_w":  meter_p_total32,
-        "meter_frequency_hz":   rb("meter_freq") * 0.01 if b else None,
-        "meter_power_factor":   _s16(rb("meter_pf")) * 0.001 if b else None,
-        "meter_export_total_kwh": meter_exp_kwh,
-        "meter_import_total_kwh": meter_imp_kwh,
+        "meter_frequency_hz":   _clamp(rb("meter_freq") * 0.01, _MAX_FREQ_HZ) if b else None,
+        "meter_power_factor":   _clamp(_s16(rb("meter_pf")) * 0.001, 1.0) if b else None,
+        "meter_export_total_kwh": _clamp(meter_exp_kwh, _MAX_ENERGY) if meter_exp_kwh is not None else None,
+        "meter_import_total_kwh": _clamp(meter_imp_kwh, _MAX_ENERGY) if meter_imp_kwh is not None else None,
     }
 
 
@@ -303,15 +309,39 @@ class GoodWeCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(seconds=interval),
         )
 
-        # Output-side spike filters
-        self._sf_pv   = _SpikeFilter(max_delta=10_000)
-        self._sf_bat  = _SpikeFilter(max_delta=8_000)
-        self._sf_grid = _SpikeFilter(max_delta=10_000)
-        self._sf_load = _SpikeFilter(max_delta=10_000)
+        # Output-side spike filters — power channels
+        self._sf_pv      = _SpikeFilter(max_delta=10_000)
+        self._sf_pv1     = _SpikeFilter(max_delta=10_000)
+        self._sf_pv2     = _SpikeFilter(max_delta=10_000)
+        self._sf_pv3     = _SpikeFilter(max_delta=10_000)
+        self._sf_pv4     = _SpikeFilter(max_delta=10_000)
+        self._sf_bat     = _SpikeFilter(max_delta=8_000)
+        self._sf_grid    = _SpikeFilter(max_delta=10_000)
+        self._sf_grid_r  = _SpikeFilter(max_delta=10_000)
+        self._sf_grid_s  = _SpikeFilter(max_delta=10_000)
+        self._sf_grid_t  = _SpikeFilter(max_delta=10_000)
+        self._sf_load    = _SpikeFilter(max_delta=10_000)
+        self._sf_meter   = _SpikeFilter(max_delta=10_000)
+        self._sf_meter_r = _SpikeFilter(max_delta=10_000)
+        self._sf_meter_s = _SpikeFilter(max_delta=10_000)
+        self._sf_meter_t = _SpikeFilter(max_delta=10_000)
+        self._sf_meter32 = _SpikeFilter(max_delta=10_000)
+
+        # Output-side spike filters — energy counters (applied before monotonic guard)
+        self._sf_e_pv_total        = _SpikeFilter(max_delta=200)
+        self._sf_e_export_total    = _SpikeFilter(max_delta=200)
+        self._sf_e_import_total    = _SpikeFilter(max_delta=200)
+        self._sf_e_meter_exp_total = _SpikeFilter(max_delta=200)
+        self._sf_e_meter_imp_total = _SpikeFilter(max_delta=200)
 
         # Monotonic energy guards
         self._mono = {k: _MonotonicGuard() for k in (
-            "pv_energy_total_kwh", "grid_export_total_kwh", "grid_import_total_kwh")}
+            "pv_energy_total_kwh",
+            "grid_export_total_kwh",
+            "grid_import_total_kwh",
+            "meter_export_total_kwh",
+            "meter_import_total_kwh",
+        )}
 
     async def _async_update_data(self) -> dict:
         data = await self.hass.async_add_executor_job(
@@ -321,15 +351,43 @@ class GoodWeCoordinator(DataUpdateCoordinator):
         if data is None:
             raise UpdateFailed(f"No data received from inverter at {self._host}")
 
+        # Spike-filter energy counters first, then apply monotonic guards so that
+        # a single corrupted reading cannot permanently lock the counter too high.
+        data["pv_energy_total_kwh"]     = self._sf_e_pv_total(data.get("pv_energy_total_kwh"))
+        data["grid_export_total_kwh"]   = self._sf_e_export_total(data.get("grid_export_total_kwh"))
+        data["grid_import_total_kwh"]   = self._sf_e_import_total(data.get("grid_import_total_kwh"))
+        data["meter_export_total_kwh"]  = self._sf_e_meter_exp_total(data.get("meter_export_total_kwh"))
+        data["meter_import_total_kwh"]  = self._sf_e_meter_imp_total(data.get("meter_import_total_kwh"))
+
         # Apply monotonic guards
         for key, guard in self._mono.items():
             data[key] = guard(data.get(key))
 
-        # Apply output spike filters
-        data["pv_power_w"]      = self._sf_pv(data.get("pv_power_w"))
+        # Apply output spike filters — individual PV strings
+        data["pv1_power_w"] = self._sf_pv1(data.get("pv1_power_w"))
+        data["pv2_power_w"] = self._sf_pv2(data.get("pv2_power_w"))
+        data["pv3_power_w"] = self._sf_pv3(data.get("pv3_power_w"))
+        data["pv4_power_w"] = self._sf_pv4(data.get("pv4_power_w"))
+        data["pv_power_w"]  = self._sf_pv(data.get("pv_power_w"))
+
+        # Battery
         data["battery_power_w"] = self._sf_bat(data.get("battery_power_w"))
+
+        # Grid — total and per phase
         grid = self._sf_grid(data.get("grid_power_w"))
-        data["grid_power_w"]    = 0.0 if grid is not None and abs(grid) < 30 else grid
-        data["load_power_w"]    = self._sf_load(data.get("load_power_w"))
+        data["grid_power_w"]   = 0.0 if grid is not None and abs(grid) < 30 else grid
+        data["grid_power_r_w"] = self._sf_grid_r(data.get("grid_power_r_w"))
+        data["grid_power_s_w"] = self._sf_grid_s(data.get("grid_power_s_w"))
+        data["grid_power_t_w"] = self._sf_grid_t(data.get("grid_power_t_w"))
+
+        # Load
+        data["load_power_w"] = self._sf_load(data.get("load_power_w"))
+
+        # External meter — per phase and totals
+        data["meter_power_r_w"]    = self._sf_meter_r(data.get("meter_power_r_w"))
+        data["meter_power_s_w"]    = self._sf_meter_s(data.get("meter_power_s_w"))
+        data["meter_power_t_w"]    = self._sf_meter_t(data.get("meter_power_t_w"))
+        data["meter_power_w"]      = self._sf_meter(data.get("meter_power_w"))
+        data["meter_power_total_w"] = self._sf_meter32(data.get("meter_power_total_w"))
 
         return data
