@@ -11,6 +11,7 @@ they never block the event loop.
 from __future__ import annotations
 
 import logging
+import struct
 from collections import deque
 from datetime import timedelta
 from typing import Optional
@@ -36,7 +37,7 @@ _LOGGER = logging.getLogger(__name__)
 _BLOCK_A_START = 35100
 _BLOCK_A_COUNT = 100
 _BLOCK_B_START = 36000
-_BLOCK_B_COUNT = 50
+_BLOCK_B_COUNT = 50  # covers offsets 0–49 (36000–36049)
 
 _A = {
     "vpv1": 3, "ipv1": 4, "ppv1": 5,
@@ -56,8 +57,21 @@ _A = {
 }
 
 _B = {
-    "e_total_export_hi": 15, "e_total_export_lo": 16,
-    "e_total_import_hi": 17, "e_total_import_lo": 18,
+    # External meter – compact int16 readings (offsets 5–14)
+    "meter_p1":    5,   # Active power L1 (signed int16, W)
+    "meter_p2":    6,   # Active power L2 (signed int16, W)
+    "meter_p3":    7,   # Active power L3 (signed int16, W)
+    "meter_p":     8,   # Active power total (signed int16, W)
+    "meter_q":     9,   # Reactive power total (signed int16, var)
+    "meter_pf":   13,   # Power factor (×0.001)
+    "meter_freq": 14,   # Frequency (×0.01 Hz)
+    # External meter – energy counters.  Stored as IEEE 754 float32 (big-endian
+    # word order); raw unit is Wh, divide by 1000 to get kWh.  See also the
+    # marcelblijleven/goodwe reference library (Float type, scale=1000).
+    "e_total_export_hi": 15, "e_total_export_lo": 16,   # float32 → Wh ÷1000 = kWh
+    "e_total_import_hi": 17, "e_total_import_lo": 18,   # float32 → Wh ÷1000 = kWh
+    # Extended 32-bit active power (signed int32)
+    "meter_p_total_hi": 25, "meter_p_total_lo": 26,
 }
 
 _MAX_PV_W      = 30_000
@@ -79,6 +93,17 @@ def _u32(hi: int, lo: int) -> int:
 
 def _clamp(value: float, max_abs: float) -> Optional[float]:
     return value if abs(value) <= max_abs else None
+
+
+def _f32(hi: int, lo: int) -> float:
+    """Decode two 16-bit big-endian Modbus registers as an IEEE 754 float32."""
+    return struct.unpack(">f", struct.pack(">HH", hi, lo))[0]
+
+
+def _s32(hi: int, lo: int) -> int:
+    """Decode two 16-bit registers as a signed int32."""
+    val = (hi << 16) | lo
+    return val if val < 0x80000000 else val - 0x100000000
 
 
 def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
@@ -115,11 +140,30 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
     def rb(key: str) -> int:
         return b[_B[key]] if b else 0
 
+    def _rb_grid_w(key: str) -> Optional[float]:
+        """Read a signed int16 grid-power register; returns None when Block B is absent."""
+        return _clamp(float(_s16(rb(key))), _MAX_GRID_W) if b else None
+
     ppv1 = _clamp(float(a[_A["ppv1"]]), _MAX_PV_W)
     ppv2 = _clamp(float(a[_A["ppv2"]]), _MAX_PV_W)
     ppv3 = _clamp(float(a[_A["ppv3"]]), _MAX_PV_W)
     ppv4 = _clamp(float(a[_A["ppv4"]]), _MAX_PV_W)
     pv_total = sum(p for p in (ppv1, ppv2, ppv3, ppv4) if p is not None)
+
+    # External meter readings from Block B (None when Block B unavailable)
+    meter_p_total32 = (
+        _clamp(float(_s32(rb("meter_p_total_hi"), rb("meter_p_total_lo"))), _MAX_GRID_W)
+        if b else None
+    )
+
+    # The energy registers at offsets 15–18 contain IEEE 754 float32 values
+    # whose raw unit is Wh (divide by 1000 to obtain kWh).  This matches the
+    # encoding documented in the marcelblijleven/goodwe reference library.
+    # Note: these sensors do not have monotonic guards; the firmware counter
+    # may reset at midnight for daily values, so TOTAL_INCREASING semantics
+    # rely on HA's own long-term statistics correction.
+    meter_exp_kwh = _f32(rb("e_total_export_hi"), rb("e_total_export_lo")) / 1000.0 if b else None
+    meter_imp_kwh = _f32(rb("e_total_import_hi"), rb("e_total_import_lo")) / 1000.0 if b else None
 
     return {
         "pv1_voltage_v":   a[_A["vpv1"]] * 0.1,
@@ -152,6 +196,16 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
         "grid_export_total_kwh": _u32(rb("e_total_export_hi"), rb("e_total_export_lo")) * 0.1,
         "grid_import_total_kwh": _u32(rb("e_total_import_hi"), rb("e_total_import_lo")) * 0.1,
         "work_mode": a[_A["work_mode"]],
+        # ── External meter (Block B) ──────────────────────────────────────────
+        "meter_power_r_w":      _rb_grid_w("meter_p1"),
+        "meter_power_s_w":      _rb_grid_w("meter_p2"),
+        "meter_power_t_w":      _rb_grid_w("meter_p3"),
+        "meter_power_w":        _rb_grid_w("meter_p"),
+        "meter_power_total_w":  meter_p_total32,
+        "meter_frequency_hz":   rb("meter_freq") * 0.01 if b else None,
+        "meter_power_factor":   rb("meter_pf") * 0.001 if b else None,
+        "meter_export_total_kwh": meter_exp_kwh,
+        "meter_import_total_kwh": meter_imp_kwh,
     }
 
 
@@ -219,6 +273,15 @@ class GoodWeCoordinator(DataUpdateCoordinator):
         self._mono_s = {k: _MonotonicGuard() for k in (
             "pv_energy_total_kwh", "grid_export_total_kwh", "grid_import_total_kwh")}
 
+        # Raw per-inverter data – populated each update cycle
+        self.master_data: Optional[dict] = None
+        self.slave_data: Optional[dict] = None
+
+    @property
+    def has_slave(self) -> bool:
+        """True when a second (slave) inverter is configured."""
+        return bool(self._slave_host)
+
     async def _async_update_data(self) -> dict:
         master = await self.hass.async_add_executor_job(
             _read_inverter, self._master_host, self._port, self._unit_id
@@ -240,6 +303,10 @@ class GoodWeCoordinator(DataUpdateCoordinator):
         if slave:
             for key, guard in self._mono_s.items():
                 slave[key] = guard(slave.get(key))
+
+        # Store raw per-inverter snapshots so sensor entities can read them
+        self.master_data = master
+        self.slave_data  = slave
 
         combined = _combine(master, slave)
 
