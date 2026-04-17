@@ -109,6 +109,7 @@ _MAX_BAT_W     = 20_000
 _MAX_GRID_W    = 30_000
 _MAX_LOAD_W    = 30_000
 _MAX_ENERGY    = 999_999
+_MAX_ENERGY_DAY = 1_000  # max plausible kWh in a single day for a residential system
 _MAX_PV_VOLT   = 1_000      # max plausible PV string voltage (V)
 _MAX_GRID_VOLT = 320        # max plausible AC grid voltage (V)
 _MAX_FREQ_HZ   = 65         # max plausible grid frequency (Hz)
@@ -237,10 +238,10 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
         "battery_soc_pct": _clamp(float(c[_C["battery_soc"]]), _MAX_SOC_PCT) if c else None,
         "load_power_w":    _clamp(float(_s16(a[_A["pload"]])), _MAX_LOAD_W),
         "inverter_temp_c": _clamp(_s16(a[_A["temperature"]]) * 0.1, _MAX_TEMP_C),
-        "pv_energy_today_kwh":        _clamp(_u32(a[_A["e_day_pv_hi"]],    a[_A["e_day_pv_lo"]])    * 0.1, _MAX_ENERGY),
+        "pv_energy_today_kwh":        _clamp(_u32(a[_A["e_day_pv_hi"]],    a[_A["e_day_pv_lo"]])    * 0.1, _MAX_ENERGY_DAY),
         "pv_energy_total_kwh":        _clamp(_u32(a[_A["e_total_pv_hi"]],  a[_A["e_total_pv_lo"]]) * 0.1, _MAX_ENERGY),
-        "battery_charge_today_kwh":   _clamp(a[_A["e_bat_charge_day"]]    * 0.1, _MAX_ENERGY),
-        "battery_discharge_today_kwh": _clamp(a[_A["e_bat_discharge_day"]] * 0.1, _MAX_ENERGY),
+        "battery_charge_today_kwh":   _clamp(a[_A["e_bat_charge_day"]]    * 0.1, _MAX_ENERGY_DAY),
+        "battery_discharge_today_kwh": _clamp(a[_A["e_bat_discharge_day"]] * 0.1, _MAX_ENERGY_DAY),
         # Inverter-side export/import totals (Block A, u32, ÷10 = kWh)
         "grid_export_total_kwh": _clamp(_u32(a[_A["e_total_export_hi"]], a[_A["e_total_export_lo"]]) * 0.1, _MAX_ENERGY),
         "grid_import_total_kwh": _clamp(_u32(a[_A["e_total_import_hi"]], a[_A["e_total_import_lo"]]) * 0.1, _MAX_ENERGY),
@@ -273,6 +274,36 @@ class _SpikeFilter:
             median = sorted(self._history)[len(self._history) // 2]
             if abs(value - median) > self._max_delta:
                 return self._last
+        self._history.append(value)
+        self._last = value
+        return value
+
+
+class _DailyEnergyFilter:
+    """Spike filter for daily (today) energy counters.
+
+    Only upward spikes (value > median + max_up_delta) are rejected.
+    A significant *drop* — which indicates a midnight counter reset — is
+    accepted and clears the history so the filter adapts to the new day
+    immediately instead of freezing at the previous day's final value.
+    """
+
+    def __init__(self, window: int = 5, max_up_delta: float = 10) -> None:
+        self._history: deque[float] = deque(maxlen=window)
+        self._last: Optional[float] = None
+        self._max_up_delta = max_up_delta
+
+    def __call__(self, value: Optional[float]) -> Optional[float]:
+        if value is None:
+            return self._last
+        if self._history:
+            median = sorted(self._history)[len(self._history) // 2]
+            if value > median + self._max_up_delta:
+                # Upward spike — corrupted register; suppress it
+                return self._last
+            if value < median - self._max_up_delta:
+                # Significant drop — midnight reset; clear stale history
+                self._history.clear()
         self._history.append(value)
         self._last = value
         return value
@@ -334,6 +365,12 @@ class GoodWeCoordinator(DataUpdateCoordinator):
         self._sf_e_meter_exp_total = _SpikeFilter(max_delta=200)
         self._sf_e_meter_imp_total = _SpikeFilter(max_delta=200)
 
+        # Spike filters for daily (today) energy counters — only upward spikes are
+        # rejected; midnight resets (drop to ~0) clear the history automatically.
+        self._sf_e_pv_today        = _DailyEnergyFilter(max_up_delta=10)
+        self._sf_e_bat_chg_today   = _DailyEnergyFilter(max_up_delta=10)
+        self._sf_e_bat_dis_today   = _DailyEnergyFilter(max_up_delta=10)
+
         # Monotonic energy guards
         self._mono = {k: _MonotonicGuard() for k in (
             "pv_energy_total_kwh",
@@ -358,6 +395,13 @@ class GoodWeCoordinator(DataUpdateCoordinator):
         data["grid_import_total_kwh"]   = self._sf_e_import_total(data.get("grid_import_total_kwh"))
         data["meter_export_total_kwh"]  = self._sf_e_meter_exp_total(data.get("meter_export_total_kwh"))
         data["meter_import_total_kwh"]  = self._sf_e_meter_imp_total(data.get("meter_import_total_kwh"))
+
+        # Spike-filter daily energy counters — u16 register corruption (e.g. 65535)
+        # yields 6 553.5 kWh which is far above the tight _MAX_ENERGY_DAY clamp but
+        # the filter catches any residual implausible jumps as a second line of defence.
+        data["pv_energy_today_kwh"]          = self._sf_e_pv_today(data.get("pv_energy_today_kwh"))
+        data["battery_charge_today_kwh"]     = self._sf_e_bat_chg_today(data.get("battery_charge_today_kwh"))
+        data["battery_discharge_today_kwh"]  = self._sf_e_bat_dis_today(data.get("battery_discharge_today_kwh"))
 
         # Apply monotonic guards
         for key, guard in self._mono.items():
