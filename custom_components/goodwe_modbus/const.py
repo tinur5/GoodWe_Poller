@@ -258,7 +258,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
 )
 
-# ── External CT meter sensors (disabled by default; user can enable as needed) ──
+# ── External CT meter sensors (enabled by default) ──────────────────────────
 
 SENSOR_DESCRIPTIONS_METER: tuple[GoodWeSensorEntityDescription, ...] = (
     # Active power – compact int16 readings (fast update, lower range)
@@ -269,7 +269,6 @@ SENSOR_DESCRIPTIONS_METER: tuple[GoodWeSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:meter-electric",
-        entity_registry_enabled_default=False,
     ),
     GoodWeSensorEntityDescription(
         key="meter_power_r_w",
@@ -278,7 +277,6 @@ SENSOR_DESCRIPTIONS_METER: tuple[GoodWeSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:meter-electric-outline",
-        entity_registry_enabled_default=False,
     ),
     GoodWeSensorEntityDescription(
         key="meter_power_s_w",
@@ -287,7 +285,6 @@ SENSOR_DESCRIPTIONS_METER: tuple[GoodWeSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:meter-electric-outline",
-        entity_registry_enabled_default=False,
     ),
     GoodWeSensorEntityDescription(
         key="meter_power_t_w",
@@ -296,7 +293,6 @@ SENSOR_DESCRIPTIONS_METER: tuple[GoodWeSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:meter-electric-outline",
-        entity_registry_enabled_default=False,
     ),
     # Active power – extended 32-bit reading (wider range)
     GoodWeSensorEntityDescription(
@@ -306,7 +302,6 @@ SENSOR_DESCRIPTIONS_METER: tuple[GoodWeSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:meter-electric",
-        entity_registry_enabled_default=False,
     ),
     # Frequency
     GoodWeSensorEntityDescription(
@@ -315,7 +310,6 @@ SENSOR_DESCRIPTIONS_METER: tuple[GoodWeSensorEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfFrequency.HERTZ,
         device_class=SensorDeviceClass.FREQUENCY,
         state_class=SensorStateClass.MEASUREMENT,
-        entity_registry_enabled_default=False,
     ),
     # Power factor (dimensionless −1 … 1)
     GoodWeSensorEntityDescription(
@@ -324,7 +318,6 @@ SENSOR_DESCRIPTIONS_METER: tuple[GoodWeSensorEntityDescription, ...] = (
         native_unit_of_measurement=None,
         device_class=SensorDeviceClass.POWER_FACTOR,
         state_class=SensorStateClass.MEASUREMENT,
-        entity_registry_enabled_default=False,
     ),
     # Energy export / import – float32 representation from inverter firmware
     GoodWeSensorEntityDescription(
@@ -334,7 +327,6 @@ SENSOR_DESCRIPTIONS_METER: tuple[GoodWeSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
         icon="mdi:transmission-tower-export",
-        entity_registry_enabled_default=False,
     ),
     GoodWeSensorEntityDescription(
         key="meter_import_total_kwh",
@@ -343,6 +335,5 @@ SENSOR_DESCRIPTIONS_METER: tuple[GoodWeSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
         icon="mdi:transmission-tower-import",
-        entity_registry_enabled_default=False,
     ),
 )

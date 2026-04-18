@@ -25,7 +25,7 @@ Kein MQTT-Broker, kein externer Dienst – der Wechselrichter wird direkt aus HA
 | PV Energy Today / Total | kWh | PV-Energie |
 | Inverter Temperature | °C | Wechselrichter-Temperatur (Maximum) |
 
-### Externe Zähler-Sensoren (standardmäßig deaktiviert)
+### Externe Zähler-Sensoren
 
 | Sensor | Einheit | Beschreibung |
 |--------|---------|--------------|
