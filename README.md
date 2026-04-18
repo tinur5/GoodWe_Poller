@@ -25,7 +25,7 @@ Kein MQTT-Broker, kein externer Dienst – der Wechselrichter wird direkt aus HA
 | PV Energy Today / Total | kWh | PV-Energie |
 | Inverter Temperature | °C | Wechselrichter-Temperatur (Maximum) |
 
-### Externe Zähler-Sensoren
+### Externe Zähler-Sensoren (standardmäßig aktiviert)
 
 | Sensor | Einheit | Beschreibung |
 |--------|---------|--------------|
@@ -35,6 +35,8 @@ Kein MQTT-Broker, kein externer Dienst – der Wechselrichter wird direkt aus HA
 | Meter Frequency | Hz | Netzfrequenz am ext. Zähler |
 | Meter Power Factor | – | Leistungsfaktor ext. Zähler |
 | Meter Export / Import Total | kWh | Gesamte Netzenergie (float32-Darstellung des WR) |
+
+> Hinweis: Ist kein externer CT-Zähler angeschlossen, liefern diese Sensoren keine Daten und können in den HA-Entitätseinstellungen deaktiviert werden.
 
 ### Einzelne Wechselrichter (Geräte „Inverter 1" / „Inverter 2")
 
@@ -92,8 +94,9 @@ So sind die Daten beider Wechselrichter einzeln sichtbar.
 ## Filterlogik
 
 - **Spike-Filter**: Ausreißer werden anhand des gleitenden Medians erkannt und verworfen
+- **Tagesenergie-Filter**: Für tägliche Energiezähler (PV heute, Batterie Laden/Entladen heute) wird ein einseitiger Spike-Filter verwendet. Nur unplausibel hohe Sprünge (≥ 3 kWh über dem Median in einem Abfragezyklus) werden verworfen. Ein Abfall auf nahezu 0 (Mitternachts-Reset) wird erkannt und die Filterhistorie automatisch zurückgesetzt.
 - **Deadband**: Netzleistung < 30 W wird auf 0 gesetzt (verhindert Jitter im Leerlauf)
-- **Monotonie-Guard**: Energiezähler werden bei unplausiblen Rücksprüngen eingefroren
+- **Monotonie-Guard**: Gesamtenergiezähler werden bei unplausiblen Rücksprüngen eingefroren
 
 ## Unterstützte Register
 

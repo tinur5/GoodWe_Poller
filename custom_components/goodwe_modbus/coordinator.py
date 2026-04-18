@@ -282,7 +282,7 @@ class _SpikeFilter:
 class _DailyEnergyFilter:
     """Spike filter for daily (today) energy counters.
 
-    Only upward spikes (value > median + max_up_delta) are rejected.
+    Only upward spikes (value >= median + max_up_delta) are rejected.
     A significant *drop* — which indicates a midnight counter reset — is
     accepted and clears the history so the filter adapts to the new day
     immediately instead of freezing at the previous day's final value.
@@ -298,7 +298,7 @@ class _DailyEnergyFilter:
             return self._last
         if self._history:
             median = sorted(self._history)[len(self._history) // 2]
-            if value > median + self._max_up_delta:
+            if value >= median + self._max_up_delta:
                 # Upward spike — corrupted register; suppress it
                 return self._last
             if value < median - self._max_up_delta:
@@ -367,9 +367,12 @@ class GoodWeCoordinator(DataUpdateCoordinator):
 
         # Spike filters for daily (today) energy counters — only upward spikes are
         # rejected; midnight resets (drop to ~0) clear the history automatically.
-        self._sf_e_pv_today        = _DailyEnergyFilter(max_up_delta=10)
-        self._sf_e_bat_chg_today   = _DailyEnergyFilter(max_up_delta=10)
-        self._sf_e_bat_dis_today   = _DailyEnergyFilter(max_up_delta=10)
+        # max_up_delta=3.0 kWh: allows legitimate accumulation even at slow scan
+        # intervals (≤300 s) while still catching register-corruption spikes
+        # (e.g. a u16 glitch that jumps the reading by 10+ kWh in one cycle).
+        self._sf_e_pv_today        = _DailyEnergyFilter(max_up_delta=3.0)
+        self._sf_e_bat_chg_today   = _DailyEnergyFilter(max_up_delta=3.0)
+        self._sf_e_bat_dis_today   = _DailyEnergyFilter(max_up_delta=3.0)
 
         # Monotonic energy guards
         self._mono = {k: _MonotonicGuard() for k in (
