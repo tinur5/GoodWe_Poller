@@ -130,15 +130,24 @@ goodwe_direct/total/decoded/inverter_temp_c
 ## Filtering Strategy
 
 1. **SpikeFilter** (sliding median, per channel)  
-   Rejects samples that deviate more than `max_delta` W from the recent median.  
+   Rejects samples that deviate more than `max_delta` from the recent median.  
    Previous accepted value is returned instead.
 
-2. **DeadbandFilter** (grid power)  
+2. **DailyEnergyFilter** (daily energy counters: PV today, battery charge/discharge today)  
+   One-sided spike filter for counters that reset to zero at midnight.  
+   - Upward spikes (`value >= median + max_up_delta`, with `max_up_delta = 3.0 kWh`)
+     are suppressed — catches u16 register-corruption glitches (e.g. a 10 kWh
+     jump in a single poll cycle).  
+   - A significant *drop* (`value < median − max_up_delta`) is treated as a
+     midnight counter reset: history is cleared and the new low value is accepted
+     immediately so the filter does not freeze at the previous day's final value.
+
+3. **DeadbandFilter** (grid power)  
    Values with |P| < 30 W are mapped to 0 to suppress jitter at standby.
 
-3. **MonotonicGuard** (energy counters)  
-   Rejects counter decreases that are not large enough to be a true rollover.  
-   Applied per inverter *before* summation.
+4. **MonotonicGuard** (cumulative energy counters)  
+   Rejects counter decreases for total-energy registers (not daily counters).  
+   Applied *after* spike filtering.
 
 ## Home Assistant Devices (HA custom integration)
 
@@ -148,5 +157,7 @@ all inverter and external meter sensors.
 To monitor multiple inverters, add this integration once per inverter via
 **Settings → Devices & Services → Add Integration**.
 
-External meter (Block B) sensors are included on each device and are **disabled
-by default**; enable the ones you need in the HA entity settings.
+External meter (Block B) sensors are included on each device and are **enabled
+by default**. If your inverter does not have an external CT meter connected,
+the meter sensors will simply report no data and can be disabled manually in
+the HA entity settings.
