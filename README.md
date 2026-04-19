@@ -15,10 +15,11 @@ Kein MQTT-Broker, kein externer Dienst – der Wechselrichter wird direkt aus HA
 |--------|---------|--------------|
 | PV Power Total | W | Gesamte PV-Leistung (alle Wechselrichter) |
 | PV1–4 Power / Voltage / Current | W / V / A | Einzelne PV-Strings |
-| Battery Power | W | Ladeleistung (+ = laden, − = entladen) |
+| Battery Power | W | Batterieladeleistung (+ = Entladen, − = Laden) |
 | Battery SOC | % | Ladestand (Durchschnitt bei 2 WR) |
 | Battery Charged/Discharged Today | kWh | Tagesenergie Batterie |
-| Grid Power | W | Netzleistung (+ = Einspeisung, − = Bezug) |
+| Battery Charged/Discharged Total | kWh | Lebenszeit-Energiezähler Batterie |
+| Grid Power | W | Netzleistung (+ = Netzbezug, − = Einspeisung) |
 | Grid Voltage / Frequency | V / Hz | Netzspannung und -frequenz |
 | Grid Export / Import Total | kWh | Gesamte Netzenergie |
 | Load Power | W | Hausverbrauch |
