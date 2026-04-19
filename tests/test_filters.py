@@ -4,6 +4,8 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import pytest
+
 # HA stubs installed by conftest.py
 from custom_components.goodwe_modbus.coordinator import (
     _SpikeFilter,
@@ -157,9 +159,6 @@ class TestDailyEnergyFilter:
         # Tiny decrease — not a spike, not a midnight reset; accepted
         result = f(9.5)
         assert result == pytest.approx(9.5)
-
-
-import pytest  # noqa: E402 (needed for pytest.approx above)
 
 
 # ── _MonotonicGuard ───────────────────────────────────────────────────────────

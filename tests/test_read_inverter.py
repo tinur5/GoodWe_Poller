@@ -307,8 +307,8 @@ class TestReadInverterEnergy:
 
     def test_pv_energy_total(self):
         # e_total_pv at offsets 91, 92: raw 100000 → 10000.0 kWh
-        a = _make_registers(125, {91: 1, 92: 0x86A0})  # 1*65536 + 34464 = 99936 ≠ 100000
         # 100000 = 0x000186A0 → hi=0x0001, lo=0x86A0
+        a = _make_registers(125)
         a[91] = 0x0001
         a[92] = 0x86A0
         result = self._run(a)
