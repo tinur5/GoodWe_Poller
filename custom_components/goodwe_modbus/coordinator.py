@@ -92,7 +92,7 @@ _B = {
     "meter_pf":  13,   # Power factor (signed int16, ×0.001)
     "meter_freq": 14,  # Frequency (u16, ×0.01 Hz)
     # Energy counters stored as IEEE 754 float32 (big-endian word order).
-    # The float32 value is already in kWh — no further scaling required.
+    # The float32 value represents the energy in kWh directly — no scaling required.
     "e_total_export_hi": 15, "e_total_export_lo": 16,
     "e_total_import_hi": 17, "e_total_import_lo": 18,
     # Extended 32-bit active-power total (signed int32)
@@ -208,11 +208,10 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
         if b else None
     )
 
-    # External meter energy totals: float32 registers store the value in Wh.
-    # Divide by 1000 to convert to kWh (confirmed against goodwe reference
-    # library: Float("meter_e_total_exp/imp", 36015/36017, scale=1000, unit="kWh")).
-    meter_exp_kwh = _f32(rb("e_total_export_hi"), rb("e_total_export_lo")) / 1000.0 if b else None
-    meter_imp_kwh = _f32(rb("e_total_import_hi"), rb("e_total_import_lo")) / 1000.0 if b else None
+    # External meter energy totals: float32 registers (36015–36018) hold the
+    # cumulative energy directly in kWh.  No further scaling is required.
+    meter_exp_kwh = _f32(rb("e_total_export_hi"), rb("e_total_export_lo")) if b else None
+    meter_imp_kwh = _f32(rb("e_total_import_hi"), rb("e_total_import_lo")) if b else None
 
     return {
         "pv1_voltage_v":   _clamp(a[_A["vpv1"]] * 0.1, _MAX_PV_VOLT),
@@ -446,5 +445,44 @@ class GoodWeCoordinator(DataUpdateCoordinator):
         data["meter_power_t_w"]    = self._sf_meter_t(data.get("meter_power_t_w"))
         data["meter_power_w"]      = self._sf_meter(data.get("meter_power_w"))
         data["meter_power_total_w"] = self._sf_meter32(data.get("meter_power_total_w"))
+
+        # ── Meter-priority overrides ──────────────────────────────────────────
+        # When the external CT meter (Block B) is present its values match the
+        # SEMS+ portal and are more accurate than the inverter's Block A counters:
+        #
+        # • grid_export/import: meter float32 (kWh) ← preferred over inverter u32
+        # • grid_power_w:       meter s32 (32-bit range) ← preferred over s16
+        #
+        # Fallback to Block A values when Block B is unavailable.
+        meter_exp = data.get("meter_export_total_kwh")
+        meter_imp = data.get("meter_import_total_kwh")
+        meter_pw  = data.get("meter_power_total_w")
+
+        if meter_exp is not None:
+            data["grid_export_total_kwh"] = meter_exp
+        if meter_imp is not None:
+            data["grid_import_total_kwh"] = meter_imp
+        if meter_pw is not None:
+            # Re-apply the same 30 W deadband used for Block A grid power
+            # to suppress sub-threshold noise when the grid exchange is near zero.
+            data["grid_power_w"] = 0.0 if abs(meter_pw) < 30 else meter_pw
+
+        # ── Per-cycle debug logging ───────────────────────────────────────────
+        _LOGGER.debug(
+            "GoodWe cycle — "
+            "PV: %s W | Bat: %s W | Grid: %s W | "
+            "GridExp: %s kWh | GridImp: %s kWh | "
+            "BatChg: %s kWh | BatDis: %s kWh | "
+            "MeterExp: %s kWh | MeterImp: %s kWh",
+            data.get("pv_power_w"),
+            data.get("battery_power_w"),
+            data.get("grid_power_w"),
+            data.get("grid_export_total_kwh"),
+            data.get("grid_import_total_kwh"),
+            data.get("battery_charge_total_kwh"),
+            data.get("battery_discharge_total_kwh"),
+            data.get("meter_export_total_kwh"),
+            data.get("meter_import_total_kwh"),
+        )
 
         return data
