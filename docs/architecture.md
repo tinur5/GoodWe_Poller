@@ -91,8 +91,8 @@ GoodWe Inverter(s)          Python Poller              MQTT Broker
 | 36009 | +9 | Meter reactive power total | s16 | ×1 | var |
 | 36013 | +13 | Meter power factor | s16 | ×0.001 | – |
 | 36014 | +14 | Meter frequency | u16 | ×0.01 | Hz |
-| 36015–36016 | +15–16 | E_total export (float32) | float32 | – | kWh |
-| 36017–36018 | +17–18 | E_total import (float32) | float32 | – | kWh |
+| 36015–36016 | +15–16 | E_total export (float32) | float32 | ÷1000 (Wh→kWh) | kWh |
+| 36017–36018 | +17–18 | E_total import (float32) | float32 | ÷1000 (Wh→kWh) | kWh |
 | 36025–36026 | +25–26 | Meter active power total (32-bit) | s32 | ×1 | W |
 
 > **Grid sign convention (Blocks A & B):** GoodWe reports positive = export to grid.

@@ -208,10 +208,11 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
         if b else None
     )
 
-    # External meter energy totals: float32 registers whose value is already in kWh
-    # (confirmed by the reference implementation — no additional scaling required).
-    meter_exp_kwh = _f32(rb("e_total_export_hi"), rb("e_total_export_lo")) if b else None
-    meter_imp_kwh = _f32(rb("e_total_import_hi"), rb("e_total_import_lo")) if b else None
+    # External meter energy totals: float32 registers store the value in Wh.
+    # Divide by 1000 to convert to kWh (confirmed against goodwe reference
+    # library: Float("meter_e_total_exp/imp", 36015/36017, scale=1000, unit="kWh")).
+    meter_exp_kwh = _f32(rb("e_total_export_hi"), rb("e_total_export_lo")) / 1000.0 if b else None
+    meter_imp_kwh = _f32(rb("e_total_import_hi"), rb("e_total_import_lo")) / 1000.0 if b else None
 
     return {
         "pv1_voltage_v":   _clamp(a[_A["vpv1"]] * 0.1, _MAX_PV_VOLT),
@@ -242,6 +243,9 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
         "pv_energy_total_kwh":        _clamp(_u32(a[_A["e_total_pv_hi"]],  a[_A["e_total_pv_lo"]]) * 0.1, _MAX_ENERGY),
         "battery_charge_today_kwh":   _clamp(a[_A["e_bat_charge_day"]]    * 0.1, _MAX_ENERGY_DAY),
         "battery_discharge_today_kwh": _clamp(a[_A["e_bat_discharge_day"]] * 0.1, _MAX_ENERGY_DAY),
+        # Battery lifetime totals (Block A, u32, ÷10 = kWh)
+        "battery_charge_total_kwh":    _clamp(_u32(a[_A["e_bat_charge_total_hi"]],    a[_A["e_bat_charge_total_lo"]])    * 0.1, _MAX_ENERGY),
+        "battery_discharge_total_kwh": _clamp(_u32(a[_A["e_bat_discharge_total_hi"]], a[_A["e_bat_discharge_total_lo"]]) * 0.1, _MAX_ENERGY),
         # Inverter-side export/import totals (Block A, u32, ÷10 = kWh)
         "grid_export_total_kwh": _clamp(_u32(a[_A["e_total_export_hi"]], a[_A["e_total_export_lo"]]) * 0.1, _MAX_ENERGY),
         "grid_import_total_kwh": _clamp(_u32(a[_A["e_total_import_hi"]], a[_A["e_total_import_lo"]]) * 0.1, _MAX_ENERGY),
@@ -272,7 +276,7 @@ class _SpikeFilter:
             return self._last
         if self._history:
             median = sorted(self._history)[len(self._history) // 2]
-            if abs(value - median) > self._max_delta:
+            if abs(value - median) >= self._max_delta:
                 return self._last
         self._history.append(value)
         self._last = value
@@ -364,6 +368,8 @@ class GoodWeCoordinator(DataUpdateCoordinator):
         self._sf_e_import_total    = _SpikeFilter(max_delta=200)
         self._sf_e_meter_exp_total = _SpikeFilter(max_delta=200)
         self._sf_e_meter_imp_total = _SpikeFilter(max_delta=200)
+        self._sf_e_bat_chg_total   = _SpikeFilter(max_delta=200)
+        self._sf_e_bat_dis_total   = _SpikeFilter(max_delta=200)
 
         # Spike filters for daily (today) energy counters — only upward spikes are
         # rejected; midnight resets (drop to ~0) clear the history automatically.
@@ -381,6 +387,8 @@ class GoodWeCoordinator(DataUpdateCoordinator):
             "grid_import_total_kwh",
             "meter_export_total_kwh",
             "meter_import_total_kwh",
+            "battery_charge_total_kwh",
+            "battery_discharge_total_kwh",
         )}
 
     async def _async_update_data(self) -> dict:
@@ -393,11 +401,13 @@ class GoodWeCoordinator(DataUpdateCoordinator):
 
         # Spike-filter energy counters first, then apply monotonic guards so that
         # a single corrupted reading cannot permanently lock the counter too high.
-        data["pv_energy_total_kwh"]     = self._sf_e_pv_total(data.get("pv_energy_total_kwh"))
-        data["grid_export_total_kwh"]   = self._sf_e_export_total(data.get("grid_export_total_kwh"))
-        data["grid_import_total_kwh"]   = self._sf_e_import_total(data.get("grid_import_total_kwh"))
-        data["meter_export_total_kwh"]  = self._sf_e_meter_exp_total(data.get("meter_export_total_kwh"))
-        data["meter_import_total_kwh"]  = self._sf_e_meter_imp_total(data.get("meter_import_total_kwh"))
+        data["pv_energy_total_kwh"]          = self._sf_e_pv_total(data.get("pv_energy_total_kwh"))
+        data["grid_export_total_kwh"]        = self._sf_e_export_total(data.get("grid_export_total_kwh"))
+        data["grid_import_total_kwh"]        = self._sf_e_import_total(data.get("grid_import_total_kwh"))
+        data["meter_export_total_kwh"]       = self._sf_e_meter_exp_total(data.get("meter_export_total_kwh"))
+        data["meter_import_total_kwh"]       = self._sf_e_meter_imp_total(data.get("meter_import_total_kwh"))
+        data["battery_charge_total_kwh"]     = self._sf_e_bat_chg_total(data.get("battery_charge_total_kwh"))
+        data["battery_discharge_total_kwh"]  = self._sf_e_bat_dis_total(data.get("battery_discharge_total_kwh"))
 
         # Spike-filter daily energy counters — u16 register corruption (e.g. 65535)
         # yields 6 553.5 kWh which is far above the tight _MAX_ENERGY_DAY clamp but

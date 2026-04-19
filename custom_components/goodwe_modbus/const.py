@@ -181,6 +181,22 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
         state_class=SensorStateClass.TOTAL_INCREASING,
         icon="mdi:battery-minus",
     ),
+    GoodWeSensorEntityDescription(
+        key="battery_charge_total_kwh",
+        name="Battery Charged Total",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:battery-plus-outline",
+    ),
+    GoodWeSensorEntityDescription(
+        key="battery_discharge_total_kwh",
+        name="Battery Discharged Total",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:battery-minus-outline",
+    ),
     # ── Grid ──────────────────────────────────────────────────────────────────
     GoodWeSensorEntityDescription(
         key="grid_power_w",
