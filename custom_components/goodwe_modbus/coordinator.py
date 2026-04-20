@@ -166,7 +166,19 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
 
         rr_b = client.read_holding_registers(
             address=_BLOCK_B_START, count=_BLOCK_B_COUNT, device_id=unit_id)
-        b = rr_b.registers if not rr_b.isError() else None
+        if rr_b.isError():
+            _LOGGER.warning("Block B (CT meter) not available from %s: %s", host, rr_b)
+            b = None
+        else:
+            b = rr_b.registers
+            _min_b_len = max(_B.values()) + 1  # highest offset used + 1 = 27
+            if len(b) < _min_b_len:
+                _LOGGER.warning(
+                    "Block B from %s returned only %d register(s) (need ≥%d) — "
+                    "meter sensors will be unavailable.",
+                    host, len(b), _min_b_len,
+                )
+                b = None
 
         rr_c = client.read_holding_registers(
             address=_BLOCK_C_START, count=_BLOCK_C_COUNT, device_id=unit_id)

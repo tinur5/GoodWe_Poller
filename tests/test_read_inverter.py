@@ -452,6 +452,30 @@ class TestReadInverterMeter:
                     "meter_export_total_kwh", "meter_import_total_kwh"):
             assert result[key] is None, f"expected None for {key!r}"
 
+    def test_block_b_too_short_gives_none_values(self):
+        """Block B responding with fewer registers than required must not crash.
+
+        This reproduces the IndexError reported when the inverter returns a
+        non-error Modbus response for the Block B range but with fewer
+        registers than the highest offset used (26 for meter_p_total_lo).
+        All meter sensor keys must be None and no exception must be raised.
+        """
+        # Return only 10 registers — far fewer than the required 27
+        short_b = _make_registers(10)
+        mock_client = _make_mock_client(_make_registers(125), short_b, _make_registers(8))
+        with patch.dict("sys.modules", {
+            "pymodbus": MagicMock(),
+            "pymodbus.client": MagicMock(ModbusTcpClient=MagicMock(return_value=mock_client)),
+            "pymodbus.exceptions": MagicMock(ModbusException=Exception),
+        }):
+            result = _read_inverter("192.168.1.1", 502, 247)
+        assert result is not None, "should return data dict, not None"
+        for key in ("meter_power_w", "meter_power_r_w", "meter_power_s_w",
+                    "meter_power_t_w", "meter_power_total_w",
+                    "meter_frequency_hz", "meter_power_factor",
+                    "meter_export_total_kwh", "meter_import_total_kwh"):
+            assert result[key] is None, f"expected None for {key!r}"
+
     def test_temperature_decoded(self):
         # temperature at offset 76: raw signed 250 → 25.0 °C
         a = _make_registers(125, {76: 250})
