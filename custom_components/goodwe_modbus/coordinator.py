@@ -66,7 +66,8 @@ _A = {
     # ── Load & backup ─────────────────────────────────────────────────────────
     "pload": 72,     # Total Load Power (signed int16, W)
     # ── Temperatures ─────────────────────────────────────────────────────────
-    "temperature": 76,  # Radiator temperature (signed int16, ×0.1 °C)
+    "temperature_heatsink": 76,  # Heatsink/radiator temperature (signed int16, ×0.1 °C)
+    "temperature_air":      77,  # Ambient/air temperature       (signed int16, ×0.1 °C)
     # ── Work mode ────────────────────────────────────────────────────────────
     "work_mode": 87,
     # ── Battery (signed int32 = 2 registers; + = discharging) ────────────────
@@ -86,6 +87,8 @@ _A = {
 
 # Block B – ARM external CT meter (offsets relative to 36000)
 _B = {
+    # Connection status (offset 0)
+    "meter_status": 0,  # CT meter connection status (u16: 0=not connected, 1=single-phase, 2=three-phase)
     # Compact int16 active-power readings (offsets 5–9)
     "meter_p1":   5,   # L1 Active power (signed int16, W)
     "meter_p2":   6,   # L2 Active power (signed int16, W)
@@ -269,7 +272,8 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
         "battery_power_w": bat_power,
         "battery_soc_pct": _clamp(float(c[_C["battery_soc"]]), _MAX_SOC_PCT) if c else None,
         "load_power_w":    _clamp(float(_s16(a[_A["pload"]])), _MAX_LOAD_W),
-        "inverter_temp_c": _clamp(_s16(a[_A["temperature"]]) * 0.1, _MAX_TEMP_C),
+        "heatsink_temp_c": _clamp(_s16(a[_A["temperature_heatsink"]]) * 0.1, _MAX_TEMP_C),
+        "air_temp_c":      _clamp(_s16(a[_A["temperature_air"]]) * 0.1, _MAX_TEMP_C),
         "pv_energy_today_kwh":        _clamp(_u32(a[_A["e_day_pv_hi"]],    a[_A["e_day_pv_lo"]])    * 0.1, _MAX_ENERGY_DAY),
         "pv_energy_total_kwh":        _clamp(_u32(a[_A["e_total_pv_hi"]],  a[_A["e_total_pv_lo"]]) * 0.1, _MAX_ENERGY),
         "battery_charge_today_kwh":   _clamp(a[_A["e_bat_charge_day"]]    * 0.1, _MAX_ENERGY_DAY),
@@ -282,6 +286,7 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
         "grid_import_total_kwh": _clamp(_u32(a[_A["e_total_import_hi"]], a[_A["e_total_import_lo"]]) * 0.1, _MAX_ENERGY),
         "work_mode": a[_A["work_mode"]],
         # ── External meter (Block B) ──────────────────────────────────────────
+        "meter_status":         b[_B["meter_status"]] if b else None,
         "meter_power_r_w":      _rb_grid_w("meter_p1"),
         "meter_power_s_w":      _rb_grid_w("meter_p2"),
         "meter_power_t_w":      _rb_grid_w("meter_p3"),
@@ -298,6 +303,7 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
 
 # Keys whose Block B (meter) values come from whichever inverter has the meter.
 _METER_KEYS = (
+    "meter_status",
     "meter_power_r_w", "meter_power_s_w", "meter_power_t_w",
     "meter_power_w", "meter_power_total_w", "meter_frequency_hz",
     "meter_power_factor", "meter_export_total_kwh", "meter_import_total_kwh",

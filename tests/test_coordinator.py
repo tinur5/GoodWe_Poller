@@ -62,7 +62,8 @@ def _base_data(**overrides) -> dict:
         "grid_power_t_w": -100.0,
         "load_power_w": 1400.0,
         "battery_soc_pct": 60.0,
-        "inverter_temp_c": 45.0,
+        "heatsink_temp_c": 45.0,
+        "air_temp_c": 20.0,
         "pv_energy_today_kwh": 5.0,
         "pv_energy_total_kwh": 10000.0,
         "battery_charge_today_kwh": 2.0,
@@ -80,6 +81,7 @@ def _base_data(**overrides) -> dict:
         "meter_power_factor": None,
         "meter_export_total_kwh": None,
         "meter_import_total_kwh": None,
+        "meter_status": None,
         "work_mode": 1,
         "pv1_voltage_v": 350.0,
         "pv1_current_a": 2.8,
@@ -492,7 +494,8 @@ class TestMergeMasterSlave:
         master = self._master()
         slave  = self._slave()
         merged = _merge_master_slave(master, slave)
-        assert merged["inverter_temp_c"] == master["inverter_temp_c"]
+        assert merged["heatsink_temp_c"] == master["heatsink_temp_c"]
+        assert merged["air_temp_c"] == master["air_temp_c"]
         assert merged["battery_soc_pct"] == master["battery_soc_pct"]
         assert merged["work_mode"] == master["work_mode"]
         assert merged["load_power_w"] == master["load_power_w"]

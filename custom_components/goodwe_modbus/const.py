@@ -274,11 +274,28 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     # ── Temperature ───────────────────────────────────────────────────────────
     GoodWeSensorEntityDescription(
-        key="inverter_temp_c",
-        name="Inverter Temperature",
+        key="heatsink_temp_c",
+        name="Heatsink Temperature",
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
+    ),
+    GoodWeSensorEntityDescription(
+        key="air_temp_c",
+        name="Air Temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    # ── Work mode ─────────────────────────────────────────────────────────────
+    GoodWeSensorEntityDescription(
+        key="work_mode",
+        name="Work Mode",
+        native_unit_of_measurement=None,
+        device_class=None,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:state-machine",
+        entity_registry_enabled_default=False,
     ),
 )
 
@@ -359,5 +376,14 @@ SENSOR_DESCRIPTIONS_METER: tuple[GoodWeSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
         icon="mdi:transmission-tower-import",
+    ),
+    # Meter connection status
+    GoodWeSensorEntityDescription(
+        key="meter_status",
+        name="Meter Connection Status",
+        native_unit_of_measurement=None,
+        device_class=None,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:meter-electric",
     ),
 )
