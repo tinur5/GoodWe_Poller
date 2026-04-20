@@ -101,8 +101,74 @@ So sind die Daten beider Wechselrichter einzeln sichtbar.
 
 ## Unterstützte Register
 
-- Block 35100–35199: Laufzeitdaten (PV, Batterie, Netz, Last)
-- Block 36000–36049: ARM-Kommunikation (Netz-Energiezähler + ext. Zähler)
+Die Integration liest drei Holding-Register-Blöcke via Modbus TCP aus
+(Protokoll: GoodWe ET/EH/BT/BH ARM205 v1.7).
+
+### Block A – Wechselrichter Laufzeitdaten (35100 … 35224)
+
+| Register | Offset | Name | Typ | Skalierung | Einheit |
+|----------|--------|------|-----|------------|---------|
+| 35103 | +3 | Vpv1 | u16 | ×0,1 | V |
+| 35104 | +4 | Ipv1 | u16 | ×0,1 | A |
+| 35105–35106 | +5–6 | Ppv1 | u32 | ×1 | W |
+| 35107 | +7 | Vpv2 | u16 | ×0,1 | V |
+| 35108 | +8 | Ipv2 | u16 | ×0,1 | A |
+| 35109–35110 | +9–10 | Ppv2 | u32 | ×1 | W |
+| 35111 | +11 | Vpv3 | u16 | ×0,1 | V |
+| 35112 | +12 | Ipv3 | u16 | ×0,1 | A |
+| 35113–35114 | +13–14 | Ppv3 | u32 | ×1 | W |
+| 35115 | +15 | Vpv4 | u16 | ×0,1 | V |
+| 35116 | +16 | Ipv4 | u16 | ×0,1 | A |
+| 35117–35118 | +17–18 | Ppv4 | u32 | ×1 | W |
+| 35121 | +21 | Vgrid R (L1) | u16 | ×0,1 | V |
+| 35122 | +22 | Igrid R (L1) | u16 | ×0,1 | A |
+| 35123 | +23 | Fgrid R (L1) | u16 | ×0,01 | Hz |
+| 35125 | +25 | Pgrid R (L1) | s16 | ×1, + = Einspeisung | W |
+| 35130 | +30 | Pgrid S (L2) | s16 | ×1, + = Einspeisung | W |
+| 35135 | +35 | Pgrid T (L3) | s16 | ×1, + = Einspeisung | W |
+| 35140 | +40 | Netzleistung Gesamt | s16 | ×1, + = Einspeisung | W |
+| 35172 | +72 | Lastleistung Gesamt | s16 | ×1 | W |
+| 35176 | +76 | Temperatur (Kühlkörper) | s16 | ×0,1 | °C |
+| 35182–35183 | +82–83 | Batterieleistung | s32 | ×1, + = Entladen | W |
+| 35187 | +87 | Arbeitsmodus | u16 | – | – |
+| 35191–35192 | +91–92 | PV-Energie Gesamt | u32 | ÷10 | kWh |
+| 35193–35194 | +93–94 | PV-Energie Heute | u32 | ÷10 | kWh |
+| 35195–35196 | +95–96 | Einspeisung Gesamt | u32 | ÷10 | kWh |
+| 35200–35201 | +100–101 | Netzbezug Gesamt | u32 | ÷10 | kWh |
+| 35206–35207 | +106–107 | Batterie Laden Gesamt | u32 | ÷10 | kWh |
+| 35208 | +108 | Batterie Laden Heute | u16 | ÷10 | kWh |
+| 35209–35210 | +109–110 | Batterie Entladen Gesamt | u32 | ÷10 | kWh |
+| 35211 | +111 | Batterie Entladen Heute | u16 | ÷10 | kWh |
+
+### Block B – Externer CT-Zähler (36000 … 36049)
+
+| Register | Offset | Name | Typ | Skalierung | Einheit |
+|----------|--------|------|-----|------------|---------|
+| 36005 | +5 | Zähler Wirkleistung L1 | s16 | ×1 | W |
+| 36006 | +6 | Zähler Wirkleistung L2 | s16 | ×1 | W |
+| 36007 | +7 | Zähler Wirkleistung L3 | s16 | ×1 | W |
+| 36008 | +8 | Zähler Wirkleistung Gesamt | s16 | ×1 | W |
+| 36009 | +9 | Zähler Blindleistung Gesamt | s16 | ×1 | var |
+| 36013 | +13 | Leistungsfaktor | s16 | ×0,001 | – |
+| 36014 | +14 | Frequenz | u16 | ×0,01 | Hz |
+| 36015–36016 | +15–16 | Einspeisung Gesamt (float32) | float32 | bereits kWh | kWh |
+| 36017–36018 | +17–18 | Netzbezug Gesamt (float32) | float32 | bereits kWh | kWh |
+| 36025–36026 | +25–26 | Zähler Wirkleistung Gesamt (32-bit) | s32 | ×1 | W |
+
+> Hinweis: Block B ist optional. Ist kein externer CT-Zähler angeschlossen, liefert dieser Block keine Daten.
+
+### Block C – BMS / Batterie-Daten (37000 … 37007)
+
+| Register | Offset | Name | Typ | Skalierung | Einheit |
+|----------|--------|------|-----|------------|---------|
+| 37007 | +7 | Batterie-Ladezustand (SOC) | u16 | ×1 | % |
+
+> Hinweis: Block C ist optional. Falls dieser Block nicht verfügbar ist, liefert der SOC-Sensor keinen Wert.
+
+> **Vorzeichenkonvention:** GoodWe meldet Netzleistung mit positivem Vorzeichen = Einspeisung ins Netz.
+> Die Integration **kehrt dieses Vorzeichen um**, damit die HA-Konvention gilt: **positiv = Netzbezug, negativ = Einspeisung**.
+
+Weitere Details zur Architektur und Filterlogik: [docs/architecture.md](docs/architecture.md)
 
 ## Disclaimer
 
