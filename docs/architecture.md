@@ -91,8 +91,8 @@ GoodWe Inverter(s)          Python Poller              MQTT Broker
 | 36009 | +9 | Meter reactive power total | s16 | ×1 | var |
 | 36013 | +13 | Meter power factor | s16 | ×0.001 | – |
 | 36014 | +14 | Meter frequency | u16 | ×0.01 | Hz |
-| 36015–36016 | +15–16 | E_total export (float32) | float32 | (already kWh) | kWh |
-| 36017–36018 | +17–18 | E_total import (float32) | float32 | (already kWh) | kWh |
+| 36015–36016 | +15–16 | E_total export (float32) | float32 | ÷1000 | kWh |
+| 36017–36018 | +17–18 | E_total import (float32) | float32 | ÷1000 | kWh |
 | 36025–36026 | +25–26 | Meter active power total (32-bit) | s32 | ×1 | W |
 
 > **Grid sign convention (Blocks A & B):** GoodWe reports positive = export to grid.
@@ -152,8 +152,8 @@ goodwe_direct/total/decoded/inverter_temp_c
 5. **Meter-priority overrides (SEMS+ alignment)**  
    When the external CT meter (Block B) is available its values are used as the
    single source of truth for grid energy and power, matching the SEMS+ portal:
-   - `grid_export_total_kwh` ← `meter_export_total_kwh` (Block B float32, kWh)
-   - `grid_import_total_kwh` ← `meter_import_total_kwh` (Block B float32, kWh)
+   - `grid_export_total_kwh` ← `meter_export_total_kwh` (Block B float32 Wh ÷1000 = kWh)
+   - `grid_import_total_kwh` ← `meter_import_total_kwh` (Block B float32 Wh ÷1000 = kWh)
    - `grid_power_w`          ← `meter_power_total_w`    (Block B s32, W)
 
    The Block A inverter-side values are still exposed as separate sensors for
