@@ -54,7 +54,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     # ── PV power ──────────────────────────────────────────────────────────────
     GoodWeSensorEntityDescription(
         key="pv_power_w",
-        name="PV Power Total",
+        name="PV Power Total (derived)",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -62,7 +62,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="pv1_power_w",
-        name="PV1 Power",
+        name="PV1 Power (35105-35106)",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -70,7 +70,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="pv2_power_w",
-        name="PV2 Power",
+        name="PV2 Power (35109-35110)",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -78,7 +78,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="pv3_power_w",
-        name="PV3 Power",
+        name="PV3 Power (35113-35114)",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -86,7 +86,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="pv4_power_w",
-        name="PV4 Power",
+        name="PV4 Power (35117-35118)",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -95,7 +95,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     # ── PV voltage / current ──────────────────────────────────────────────────
     GoodWeSensorEntityDescription(
         key="pv1_voltage_v",
-        name="PV1 Voltage",
+        name="PV1 Voltage (35103)",
         native_unit_of_measurement=UnitOfElectricPotential.VOLT,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -103,7 +103,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="pv1_current_a",
-        name="PV1 Current",
+        name="PV1 Current (35104)",
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -111,7 +111,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="pv2_voltage_v",
-        name="PV2 Voltage",
+        name="PV2 Voltage (35107)",
         native_unit_of_measurement=UnitOfElectricPotential.VOLT,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -119,7 +119,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="pv2_current_a",
-        name="PV2 Current",
+        name="PV2 Current (35108)",
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -127,7 +127,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="pv3_voltage_v",
-        name="PV3 Voltage",
+        name="PV3 Voltage (35111)",
         native_unit_of_measurement=UnitOfElectricPotential.VOLT,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -135,7 +135,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="pv3_current_a",
-        name="PV3 Current",
+        name="PV3 Current (35112)",
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -143,7 +143,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="pv4_voltage_v",
-        name="PV4 Voltage",
+        name="PV4 Voltage (35115)",
         native_unit_of_measurement=UnitOfElectricPotential.VOLT,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -151,7 +151,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="pv4_current_a",
-        name="PV4 Current",
+        name="PV4 Current (35116)",
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -160,7 +160,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     # ── Battery ───────────────────────────────────────────────────────────────
     GoodWeSensorEntityDescription(
         key="battery_power_w",
-        name="Battery Power",
+        name="Battery Power (35182-35183)",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -168,14 +168,14 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="battery_soc_pct",
-        name="Battery SOC",
+        name="Battery SOC (37007)",
         native_unit_of_measurement=PERCENTAGE,
         device_class=SensorDeviceClass.BATTERY,
         state_class=SensorStateClass.MEASUREMENT,
     ),
     GoodWeSensorEntityDescription(
         key="battery_charge_today_kwh",
-        name="Battery Charged Today",
+        name="Battery Charged Today (35208)",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -183,7 +183,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="battery_discharge_today_kwh",
-        name="Battery Discharged Today",
+        name="Battery Discharged Today (35211)",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -191,7 +191,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="battery_charge_total_kwh",
-        name="Battery Charged Total",
+        name="Battery Charged Total (35206-35207)",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -199,7 +199,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="battery_discharge_total_kwh",
-        name="Battery Discharged Total",
+        name="Battery Discharged Total (35209-35210)",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -208,7 +208,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     # ── Grid ──────────────────────────────────────────────────────────────────
     GoodWeSensorEntityDescription(
         key="grid_power_w",
-        name="Grid Power",
+        name="Grid Power (35140)",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -216,7 +216,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="grid_voltage_v",
-        name="Grid Voltage",
+        name="Grid Voltage (35121)",
         native_unit_of_measurement=UnitOfElectricPotential.VOLT,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -224,7 +224,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="grid_frequency_hz",
-        name="Grid Frequency",
+        name="Grid Frequency (35123)",
         native_unit_of_measurement=UnitOfFrequency.HERTZ,
         device_class=SensorDeviceClass.FREQUENCY,
         state_class=SensorStateClass.MEASUREMENT,
@@ -232,7 +232,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="grid_export_total_kwh",
-        name="Grid Export Total",
+        name="Grid Export Total (35195-35196)",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -240,7 +240,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="grid_import_total_kwh",
-        name="Grid Import Total",
+        name="Grid Import Total (35200-35201)",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -249,7 +249,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     # ── Load ──────────────────────────────────────────────────────────────────
     GoodWeSensorEntityDescription(
         key="load_power_w",
-        name="Load Power",
+        name="Load Power (35172)",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -258,7 +258,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     # ── PV energy ─────────────────────────────────────────────────────────────
     GoodWeSensorEntityDescription(
         key="pv_energy_today_kwh",
-        name="PV Energy Today",
+        name="PV Energy Today (35193-35194)",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -266,7 +266,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="pv_energy_total_kwh",
-        name="PV Energy Total",
+        name="PV Energy Total (35191-35192)",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -275,14 +275,14 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     # ── Temperature ───────────────────────────────────────────────────────────
     GoodWeSensorEntityDescription(
         key="heatsink_temp_c",
-        name="Heatsink Temperature",
+        name="Heatsink Temperature (35176)",
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
     ),
     GoodWeSensorEntityDescription(
         key="air_temp_c",
-        name="Air Temperature",
+        name="Air Temperature (35177)",
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -290,7 +290,7 @@ SENSOR_DESCRIPTIONS: tuple[GoodWeSensorEntityDescription, ...] = (
     # ── Work mode ─────────────────────────────────────────────────────────────
     GoodWeSensorEntityDescription(
         key="work_mode",
-        name="Work Mode",
+        name="Work Mode (35187)",
         native_unit_of_measurement=None,
         device_class=None,
         state_class=SensorStateClass.MEASUREMENT,
@@ -305,7 +305,7 @@ SENSOR_DESCRIPTIONS_METER: tuple[GoodWeSensorEntityDescription, ...] = (
     # Active power – compact int16 readings (fast update, lower range)
     GoodWeSensorEntityDescription(
         key="meter_power_w",
-        name="Meter Active Power",
+        name="Meter Active Power (36008)",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -313,7 +313,7 @@ SENSOR_DESCRIPTIONS_METER: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="meter_power_r_w",
-        name="Meter Active Power L1",
+        name="Meter Active Power L1 (36005)",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -321,7 +321,7 @@ SENSOR_DESCRIPTIONS_METER: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="meter_power_s_w",
-        name="Meter Active Power L2",
+        name="Meter Active Power L2 (36006)",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -329,7 +329,7 @@ SENSOR_DESCRIPTIONS_METER: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="meter_power_t_w",
-        name="Meter Active Power L3",
+        name="Meter Active Power L3 (36007)",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -338,7 +338,7 @@ SENSOR_DESCRIPTIONS_METER: tuple[GoodWeSensorEntityDescription, ...] = (
     # Active power – extended 32-bit reading (wider range)
     GoodWeSensorEntityDescription(
         key="meter_power_total_w",
-        name="Meter Active Power Total (32-bit)",
+        name="Meter Active Power Total (32-bit) (36025-36026)",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -347,7 +347,7 @@ SENSOR_DESCRIPTIONS_METER: tuple[GoodWeSensorEntityDescription, ...] = (
     # Frequency
     GoodWeSensorEntityDescription(
         key="meter_frequency_hz",
-        name="Meter Frequency",
+        name="Meter Frequency (36014)",
         native_unit_of_measurement=UnitOfFrequency.HERTZ,
         device_class=SensorDeviceClass.FREQUENCY,
         state_class=SensorStateClass.MEASUREMENT,
@@ -355,7 +355,7 @@ SENSOR_DESCRIPTIONS_METER: tuple[GoodWeSensorEntityDescription, ...] = (
     # Power factor (dimensionless −1 … 1)
     GoodWeSensorEntityDescription(
         key="meter_power_factor",
-        name="Meter Power Factor",
+        name="Meter Power Factor (36013)",
         native_unit_of_measurement=None,
         device_class=SensorDeviceClass.POWER_FACTOR,
         state_class=SensorStateClass.MEASUREMENT,
@@ -363,7 +363,7 @@ SENSOR_DESCRIPTIONS_METER: tuple[GoodWeSensorEntityDescription, ...] = (
     # Energy export / import – float32 representation from inverter firmware
     GoodWeSensorEntityDescription(
         key="meter_export_total_kwh",
-        name="Meter Export Total",
+        name="Meter Export Total (36015-36016)",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -371,7 +371,7 @@ SENSOR_DESCRIPTIONS_METER: tuple[GoodWeSensorEntityDescription, ...] = (
     ),
     GoodWeSensorEntityDescription(
         key="meter_import_total_kwh",
-        name="Meter Import Total",
+        name="Meter Import Total (36017-36018)",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -380,7 +380,7 @@ SENSOR_DESCRIPTIONS_METER: tuple[GoodWeSensorEntityDescription, ...] = (
     # Meter connection status
     GoodWeSensorEntityDescription(
         key="meter_status",
-        name="Meter Connection Status",
+        name="Meter Connection Status (36000)",
         native_unit_of_measurement=None,
         device_class=None,
         state_class=SensorStateClass.MEASUREMENT,
