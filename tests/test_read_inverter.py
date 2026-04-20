@@ -446,7 +446,7 @@ class TestReadInverterMeter:
             "pymodbus.exceptions": MagicMock(ModbusException=Exception),
         }):
             result = _read_inverter("192.168.1.1", 502, 247)
-        for key in ("meter_power_w", "meter_power_r_w", "meter_power_s_w",
+        for key in ("meter_status", "meter_power_w", "meter_power_r_w", "meter_power_s_w",
                     "meter_power_t_w", "meter_power_total_w",
                     "meter_frequency_hz", "meter_power_factor",
                     "meter_export_total_kwh", "meter_import_total_kwh"):
@@ -470,7 +470,7 @@ class TestReadInverterMeter:
         }):
             result = _read_inverter("192.168.1.1", 502, 247)
         assert result is not None, "should return data dict, not None"
-        for key in ("meter_power_w", "meter_power_r_w", "meter_power_s_w",
+        for key in ("meter_status", "meter_power_w", "meter_power_r_w", "meter_power_s_w",
                     "meter_power_t_w", "meter_power_total_w",
                     "meter_frequency_hz", "meter_power_factor",
                     "meter_export_total_kwh", "meter_import_total_kwh"):
@@ -505,13 +505,44 @@ class TestReadInverterMeter:
         assert result["meter_power_total_w"] is None, "int32 power must be None for partial Block B"
 
     def test_temperature_decoded(self):
-        # temperature at offset 76: raw signed 250 → 25.0 °C
+        # temperature_heatsink at offset 76: raw signed 250 → 25.0 °C
         a = _make_registers(125, {76: 250})
         result = self._run(a, _make_registers(50))
-        assert result["inverter_temp_c"] == pytest.approx(25.0)
+        assert result["heatsink_temp_c"] == pytest.approx(25.0)
 
     def test_temperature_negative(self):
         # raw -100 → -10.0 °C
         a = _make_registers(125, {76: _u16_s16(-100)})
         result = self._run(a, _make_registers(50))
-        assert result["inverter_temp_c"] == pytest.approx(-10.0)
+        assert result["heatsink_temp_c"] == pytest.approx(-10.0)
+
+    def test_air_temperature_decoded(self):
+        # temperature_air at offset 77: raw signed 200 → 20.0 °C
+        a = _make_registers(125, {77: 200})
+        result = self._run(a, _make_registers(50))
+        assert result["air_temp_c"] == pytest.approx(20.0)
+
+    def test_air_temperature_negative(self):
+        # raw -50 → -5.0 °C
+        a = _make_registers(125, {77: _u16_s16(-50)})
+        result = self._run(a, _make_registers(50))
+        assert result["air_temp_c"] == pytest.approx(-5.0)
+
+    def test_meter_status_decoded(self):
+        # meter_status at Block B offset 0: value 2 (three-phase)
+        b = _make_registers(50, {0: 2})
+        result = self._run(_make_registers(125), b)
+        assert result["meter_status"] == 2
+
+    def test_meter_status_none_when_block_b_absent(self):
+        # When Block B is missing, meter_status must be None
+        mock_client = _make_mock_client(
+            _make_registers(125), None, _make_registers(8), b_error=True
+        )
+        with patch.dict("sys.modules", {
+            "pymodbus": MagicMock(),
+            "pymodbus.client": MagicMock(ModbusTcpClient=MagicMock(return_value=mock_client)),
+            "pymodbus.exceptions": MagicMock(ModbusException=Exception),
+        }):
+            result = _read_inverter("192.168.1.1", 502, 247)
+        assert result["meter_status"] is None
