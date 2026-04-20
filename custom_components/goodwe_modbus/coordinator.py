@@ -92,7 +92,7 @@ _B = {
     "meter_pf":  13,   # Power factor (signed int16, ×0.001)
     "meter_freq": 14,  # Frequency (u16, ×0.01 Hz)
     # Energy counters stored as IEEE 754 float32 (big-endian word order).
-    # The float32 value represents the energy in kWh directly — no scaling required.
+    # The float32 value is in Wh; divide by 1000 to obtain kWh.
     "e_total_export_hi": 15, "e_total_export_lo": 16,
     "e_total_import_hi": 17, "e_total_import_lo": 18,
     # Extended 32-bit active-power total (signed int32)
@@ -209,9 +209,10 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
     )
 
     # External meter energy totals: float32 registers (36015–36018) hold the
-    # cumulative energy directly in kWh.  No further scaling is required.
-    meter_exp_kwh = _f32(rb("e_total_export_hi"), rb("e_total_export_lo")) if b else None
-    meter_imp_kwh = _f32(rb("e_total_import_hi"), rb("e_total_import_lo")) if b else None
+    # cumulative energy in Wh.  Divide by 1000 to convert to kWh.
+    # (Confirmed by the goodwe library: Float("meter_e_total_exp", 36015, scale=1000, unit="kWh"))
+    meter_exp_kwh = _f32(rb("e_total_export_hi"), rb("e_total_export_lo")) / 1000.0 if b else None
+    meter_imp_kwh = _f32(rb("e_total_import_hi"), rb("e_total_import_lo")) / 1000.0 if b else None
 
     return {
         "pv1_voltage_v":   _clamp(a[_A["vpv1"]] * 0.1, _MAX_PV_VOLT),
