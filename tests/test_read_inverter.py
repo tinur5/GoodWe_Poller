@@ -398,32 +398,29 @@ class TestReadInverterMeter:
         assert result["meter_power_factor"] == pytest.approx(-0.9)
 
     def test_meter_export_total_float32(self):
-        # Registers store energy in Wh as float32; code divides by 1000 → kWh.
-        # 1,500,750 Wh → 1500.75 kWh
-        hi, lo = _f32_regs(1_500_750.0)
+        # Registers store energy directly in kWh as float32 (unit=1kWh per GoodWe spec).
+        hi, lo = _f32_regs(1500.75)
         b = _make_registers(50, {15: hi, 16: lo})
         result = self._run(_make_registers(125), b)
         assert result["meter_export_total_kwh"] == pytest.approx(1500.75, rel=1e-4)
 
     def test_meter_import_total_float32(self):
-        # 2,500,000 Wh → 2500.0 kWh
-        hi, lo = _f32_regs(2_500_000.0)
+        # 2500.0 kWh stored directly as float32.
+        hi, lo = _f32_regs(2500.0)
         b = _make_registers(50, {17: hi, 18: lo})
         result = self._run(_make_registers(125), b)
         assert result["meter_import_total_kwh"] == pytest.approx(2500.0, rel=1e-4)
 
-    def test_meter_export_total_large_wh_not_clamped(self):
-        # Regression: 5,799,300 Wh (= 5799.3 kWh) must NOT be clamped to None.
-        # Without the ÷1000 fix the raw 5.8 M value exceeded _MAX_ENERGY (999999)
-        # and _clamp returned None, causing the sensor to show 0 kWh.
-        hi, lo = _f32_regs(5_799_300.0)
+    def test_meter_export_total_large_kwh_not_clamped(self):
+        # 5799.3 kWh must NOT be clamped to None (well within _MAX_ENERGY=999_999).
+        hi, lo = _f32_regs(5799.3)
         b = _make_registers(50, {15: hi, 16: lo})
         result = self._run(_make_registers(125), b)
         assert result["meter_export_total_kwh"] == pytest.approx(5799.3, rel=1e-3)
 
-    def test_meter_import_total_large_wh_not_clamped(self):
-        # Regression: 3,200,000 Wh (= 3200.0 kWh) must pass through correctly.
-        hi, lo = _f32_regs(3_200_000.0)
+    def test_meter_import_total_large_kwh_not_clamped(self):
+        # 3200.0 kWh must pass through correctly.
+        hi, lo = _f32_regs(3200.0)
         b = _make_registers(50, {17: hi, 18: lo})
         result = self._run(_make_registers(125), b)
         assert result["meter_import_total_kwh"] == pytest.approx(3200.0, rel=1e-3)
