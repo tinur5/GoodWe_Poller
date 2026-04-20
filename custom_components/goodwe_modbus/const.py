@@ -27,6 +27,14 @@ CONF_MODBUS_PORT   = "modbus_port"
 CONF_UNIT_ID       = "unit_id"
 CONF_SCAN_INTERVAL = "scan_interval"
 
+# Optional slave inverter (parallel/multi-inverter setups).
+# When CONF_SLAVE_HOST is set, the coordinator reads from both master and slave.
+# Grid/meter values are taken from whichever inverter has the external CT meter
+# connected (master preferred; slave used if master has no meter).
+CONF_SLAVE_HOST       = "slave_host"
+CONF_SLAVE_MODBUS_PORT = "slave_modbus_port"
+CONF_SLAVE_UNIT_ID    = "slave_unit_id"
+
 # ── Defaults ───────────────────────────────────────────────────────────────────
 DEFAULT_PORT          = 502
 DEFAULT_UNIT_ID       = 247

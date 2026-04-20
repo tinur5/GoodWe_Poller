@@ -17,6 +17,9 @@ from .const import (
     CONF_MODBUS_PORT,
     CONF_UNIT_ID,
     CONF_SCAN_INTERVAL,
+    CONF_SLAVE_HOST,
+    CONF_SLAVE_MODBUS_PORT,
+    CONF_SLAVE_UNIT_ID,
     DEFAULT_PORT,
     DEFAULT_UNIT_ID,
     DEFAULT_SCAN_INTERVAL,
@@ -35,6 +38,19 @@ STEP_USER_SCHEMA = vol.Schema(
         ),
         vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): vol.All(
             int, vol.Range(min=5, max=300)
+        ),
+        # ── Optional slave inverter ────────────────────────────────────────────
+        # In a parallel (master/slave) GoodWe setup the external CT meter is
+        # physically connected to only one inverter (usually the master).
+        # When slave_host is set, the coordinator polls both inverters and uses
+        # the external-meter (Block B) data from whichever has it, while summing
+        # PV and battery values across both units.
+        vol.Optional(CONF_SLAVE_HOST, default=""): str,
+        vol.Optional(CONF_SLAVE_MODBUS_PORT, default=DEFAULT_PORT): vol.All(
+            int, vol.Range(min=1, max=65535)
+        ),
+        vol.Optional(CONF_SLAVE_UNIT_ID, default=DEFAULT_UNIT_ID): vol.All(
+            int, vol.Range(min=1, max=255)
         ),
     }
 )
@@ -77,6 +93,7 @@ class GoodWeModbusConfigFlow(ConfigFlow, domain=DOMAIN):
             host    = user_input[CONF_HOST].strip()
             port    = user_input[CONF_MODBUS_PORT]
             unit_id = user_input[CONF_UNIT_ID]
+            slave_host = user_input.get(CONF_SLAVE_HOST, "").strip()
 
             # Prevent duplicate entries for the same inverter
             await self.async_set_unique_id(f"{host}:{port}:{unit_id}")
@@ -84,20 +101,29 @@ class GoodWeModbusConfigFlow(ConfigFlow, domain=DOMAIN):
 
             try:
                 await _test_connection(self.hass, host, port, unit_id)
+                if slave_host:
+                    slave_port    = user_input[CONF_SLAVE_MODBUS_PORT]
+                    slave_unit_id = user_input[CONF_SLAVE_UNIT_ID]
+                    await _test_connection(self.hass, slave_host, slave_port, slave_unit_id)
             except CannotConnect:
                 errors["base"] = "cannot_connect"
             except Exception:
                 _LOGGER.exception("Unexpected error during connection test")
                 errors["base"] = "unknown"
             else:
+                entry_data: dict = {
+                    CONF_HOST:          host,
+                    CONF_MODBUS_PORT:   port,
+                    CONF_UNIT_ID:       unit_id,
+                    CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL],
+                }
+                if slave_host:
+                    entry_data[CONF_SLAVE_HOST]        = slave_host
+                    entry_data[CONF_SLAVE_MODBUS_PORT] = user_input[CONF_SLAVE_MODBUS_PORT]
+                    entry_data[CONF_SLAVE_UNIT_ID]     = user_input[CONF_SLAVE_UNIT_ID]
                 return self.async_create_entry(
                     title=f"GoodWe @ {host}",
-                    data={
-                        CONF_HOST:          host,
-                        CONF_MODBUS_PORT:   port,
-                        CONF_UNIT_ID:       unit_id,
-                        CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL],
-                    },
+                    data=entry_data,
                 )
 
         return self.async_show_form(
