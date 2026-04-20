@@ -222,6 +222,49 @@ class TestCoordinatorMeterPriorityOverrides:
         assert result["grid_import_total_kwh"] == pytest.approx(2000.0, rel=1e-3)
         assert result["grid_power_w"] == -300.0
 
+    @pytest.mark.asyncio
+    async def test_meter_zero_does_not_override_block_a(self):
+        """Meter energy value of exactly 0.0 must NOT override the Block A value.
+
+        When the external CT meter is not yet configured or not reporting to the
+        inverter, Block B float32 registers at offsets 15–18 return 0.0 kWh.
+        These zeros must not suppress the valid Block A counters already stored
+        by the inverter.
+        """
+        coordinator = _make_coordinator()
+        data = _base_data(
+            grid_export_total_kwh=1500.0,
+            grid_import_total_kwh=800.0,
+            meter_export_total_kwh=0.0,
+            meter_import_total_kwh=0.0,
+        )
+        with patch(
+            "custom_components.goodwe_modbus.coordinator._read_inverter",
+            return_value=data,
+        ):
+            result = await coordinator._async_update_data()
+        # Block A values must be preserved — meter zeros must not override
+        assert result["grid_export_total_kwh"] == pytest.approx(1500.0, rel=1e-3)
+        assert result["grid_import_total_kwh"] == pytest.approx(800.0, rel=1e-3)
+
+    @pytest.mark.asyncio
+    async def test_meter_nonzero_still_overrides_block_a(self):
+        """Meter energy > 0 must still override Block A (regression guard)."""
+        coordinator = _make_coordinator()
+        data = _base_data(
+            grid_export_total_kwh=1500.0,
+            grid_import_total_kwh=800.0,
+            meter_export_total_kwh=1600.0,
+            meter_import_total_kwh=900.0,
+        )
+        with patch(
+            "custom_components.goodwe_modbus.coordinator._read_inverter",
+            return_value=data,
+        ):
+            result = await coordinator._async_update_data()
+        assert result["grid_export_total_kwh"] == pytest.approx(1600.0, rel=1e-3)
+        assert result["grid_import_total_kwh"] == pytest.approx(900.0, rel=1e-3)
+
 
 class TestCoordinatorMonotonicGuard:
     @pytest.mark.asyncio

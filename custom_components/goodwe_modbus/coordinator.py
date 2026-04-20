@@ -171,14 +171,27 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
             b = None
         else:
             b = rr_b.registers
-            _min_b_len = max(_B.values()) + 1  # highest offset used + 1 = 27
-            if len(b) < _min_b_len:
+            # Need ≥19 registers (offsets 5–9 for int16 power, 13–14 for PF/freq,
+            # and 15–18 for float32 energy totals) for basic meter data.
+            # Need ≥27 registers (additionally offsets 25–26) to read int32 total power.
+            # Some inverter firmware versions return a shorter Block B response that
+            # covers energy registers (0–18) but omits the extended power word (25–26).
+            # In that case we keep the partial block so energy sensors remain available.
+            _B_PARTIAL_LEN = 19  # minimum for int16 power + float32 energy
+            _B_FULL_LEN = 27     # required for 32-bit total power (offsets 25–26)
+            if len(b) < _B_PARTIAL_LEN:
                 _LOGGER.warning(
                     "Block B from %s returned only %d register(s) (need ≥%d) — "
                     "meter sensors will be unavailable.",
-                    host, len(b), _min_b_len,
+                    host, len(b), _B_PARTIAL_LEN,
                 )
                 b = None
+            elif len(b) < _B_FULL_LEN:
+                _LOGGER.debug(
+                    "Block B from %s returned only %d register(s) (need ≥%d for "
+                    "32-bit power) — meter active power total (32-bit) unavailable.",
+                    host, len(b), _B_FULL_LEN,
+                )
 
         rr_c = client.read_holding_registers(
             address=_BLOCK_C_START, count=_BLOCK_C_COUNT, device_id=unit_id)
@@ -195,7 +208,10 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
         client.close()
 
     def rb(key: str) -> int:
-        return b[_B[key]] if b else 0
+        if not b:
+            return 0
+        idx = _B[key]
+        return b[idx] if idx < len(b) else 0
 
     def _rb_grid_w(key: str) -> Optional[float]:
         """Read a signed int16 grid-power register from Block B.
@@ -214,10 +230,11 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
     # Battery power: signed int32 (+ = discharging into house, − = charging)
     bat_power = _clamp(float(_s32(a[_A["pbattery_hi"]], a[_A["pbattery_lo"]])), _MAX_BAT_W)
 
-    # External meter: total active power as signed int32, negated for HA convention
+    # External meter: total active power as signed int32, negated for HA convention.
+    # Only available when Block B has ≥27 registers (offsets 25–26 present).
     meter_p_total32 = (
         _clamp(-float(_s32(rb("meter_p_total_hi"), rb("meter_p_total_lo"))), _MAX_GRID_W)
-        if b else None
+        if b is not None and len(b) >= 27 else None
     )
 
     # External meter energy totals: float32 registers 36015–36018.
@@ -465,14 +482,21 @@ class GoodWeCoordinator(DataUpdateCoordinator):
         # • grid_export/import: meter float32 (kWh) ← preferred over inverter u32
         # • grid_power_w:       meter s32 (32-bit range) ← preferred over s16
         #
+        # Guard: only override with meter energy when the meter value is > 0.
+        # When the CT meter is not yet configured or not reporting to the inverter,
+        # Block B float32 registers at offsets 15–18 contain zeros. Overriding with
+        # these zeros would suppress any valid Block A energy totals already stored
+        # by the inverter.  A meter value of exactly 0.0 kWh is treated as "not yet
+        # available" and the Block A value is preserved as fallback.
+        #
         # Fallback to Block A values when Block B is unavailable.
         meter_exp = data.get("meter_export_total_kwh")
         meter_imp = data.get("meter_import_total_kwh")
         meter_pw  = data.get("meter_power_total_w")
 
-        if meter_exp is not None:
+        if meter_exp is not None and meter_exp > 0:
             data["grid_export_total_kwh"] = meter_exp
-        if meter_imp is not None:
+        if meter_imp is not None and meter_imp > 0:
             data["grid_import_total_kwh"] = meter_imp
         if meter_pw is not None:
             # Re-apply the same 30 W deadband used for Block A grid power

@@ -453,14 +453,14 @@ class TestReadInverterMeter:
             assert result[key] is None, f"expected None for {key!r}"
 
     def test_block_b_too_short_gives_none_values(self):
-        """Block B responding with fewer registers than required must not crash.
+        """Block B responding with fewer than 19 registers must not crash.
 
         This reproduces the IndexError reported when the inverter returns a
         non-error Modbus response for the Block B range but with fewer
-        registers than the highest offset used (26 for meter_p_total_lo).
+        registers than needed for even the basic meter data (offset 18).
         All meter sensor keys must be None and no exception must be raised.
         """
-        # Return only 10 registers — far fewer than the required 27
+        # Return only 10 registers — fewer than the minimum 19 required
         short_b = _make_registers(10)
         mock_client = _make_mock_client(_make_registers(125), short_b, _make_registers(8))
         with patch.dict("sys.modules", {
@@ -475,6 +475,34 @@ class TestReadInverterMeter:
                     "meter_frequency_hz", "meter_power_factor",
                     "meter_export_total_kwh", "meter_import_total_kwh"):
             assert result[key] is None, f"expected None for {key!r}"
+
+    def test_block_b_partial_gives_energy_but_no_int32_power(self):
+        """Block B with 19–26 registers should provide int16/energy data but not int32 power.
+
+        This reproduces the scenario where a GoodWe inverter returns Block B with
+        enough registers for int16 power (offsets 5–9) and float32 energy (15–18)
+        but not the extended 32-bit total power word (offsets 25–26).
+        The 32-bit power sensor must be None; all other meter sensors must work.
+        """
+        hi, lo = _f32_regs(1234.5)
+        partial_b = _make_registers(22, {
+            8: 500,    # meter_p (int16, W): raw +500 → HA = -500 (negated)
+            15: hi, 16: lo,  # e_total_export_hi/lo: 1234.5 kWh
+        })
+        mock_client = _make_mock_client(_make_registers(125), partial_b, _make_registers(8))
+        with patch.dict("sys.modules", {
+            "pymodbus": MagicMock(),
+            "pymodbus.client": MagicMock(ModbusTcpClient=MagicMock(return_value=mock_client)),
+            "pymodbus.exceptions": MagicMock(ModbusException=Exception),
+        }):
+            result = _read_inverter("192.168.1.1", 502, 247)
+        assert result is not None, "should return data dict, not None"
+        # int16 power and float32 energy must be available
+        assert result["meter_power_w"] == pytest.approx(-500.0), "int16 power should be available"
+        assert result["meter_export_total_kwh"] == pytest.approx(1234.5, rel=1e-3), \
+            "float32 export energy should be available"
+        # int32 total power must be None (offsets 25–26 out of range)
+        assert result["meter_power_total_w"] is None, "int32 power must be None for partial Block B"
 
     def test_temperature_decoded(self):
         # temperature at offset 76: raw signed 250 → 25.0 °C
