@@ -25,6 +25,9 @@ from .const import (
     CONF_MODBUS_PORT,
     CONF_UNIT_ID,
     CONF_SCAN_INTERVAL,
+    CONF_SLAVE_HOST,
+    CONF_SLAVE_MODBUS_PORT,
+    CONF_SLAVE_UNIT_ID,
     DEFAULT_PORT,
     DEFAULT_UNIT_ID,
     DEFAULT_SCAN_INTERVAL,
@@ -291,6 +294,77 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
     }
 
 
+# ── Master/slave merge helpers ────────────────────────────────────────────────
+
+# Keys whose Block B (meter) values come from whichever inverter has the meter.
+_METER_KEYS = (
+    "meter_power_r_w", "meter_power_s_w", "meter_power_t_w",
+    "meter_power_w", "meter_power_total_w", "meter_frequency_hz",
+    "meter_power_factor", "meter_export_total_kwh", "meter_import_total_kwh",
+)
+
+# Grid measurement keys that should also follow the meter source.
+_GRID_KEYS = (
+    "grid_power_w", "grid_power_r_w", "grid_power_s_w", "grid_power_t_w",
+    "grid_export_total_kwh", "grid_import_total_kwh",
+    "grid_voltage_v", "grid_frequency_hz",
+)
+
+# Power/energy keys that are summed across all inverters.
+_SUM_POWER_KEYS = ("pv_power_w", "battery_power_w")
+_SUM_ENERGY_KEYS = (
+    "pv_energy_total_kwh", "pv_energy_today_kwh",
+    "battery_charge_total_kwh", "battery_charge_today_kwh",
+    "battery_discharge_total_kwh", "battery_discharge_today_kwh",
+)
+
+
+def _has_meter(data: dict) -> bool:
+    """Return True when Block B (external CT meter) was readable on this inverter.
+
+    ``meter_power_w`` is set to a float (possibly 0.0) whenever Block B registers
+    are available and to None when Block B is absent.  This makes it a reliable
+    proxy for "has meter".
+    """
+    return data.get("meter_power_w") is not None
+
+
+def _merge_master_slave(master: dict, slave: dict) -> dict:
+    """Merge master and slave inverter data into one combined dict.
+
+    Rules:
+    - Additive channels (PV/battery power and energy totals) are **summed**.
+    - Grid and meter values come from whichever inverter has the external CT
+      meter connected (master preferred; slave used when master has no meter).
+    - All other fields (temperature, SOC, work mode, load, …) are taken from
+      the master unchanged.
+    """
+    merged = dict(master)
+
+    # Sum additive channels
+    for key in _SUM_POWER_KEYS + _SUM_ENERGY_KEYS:
+        m_val = master.get(key)
+        s_val = slave.get(key)
+        if m_val is not None and s_val is not None:
+            merged[key] = m_val + s_val
+        elif s_val is not None:
+            merged[key] = s_val
+
+    # Select meter/grid source: master preferred, slave used as fallback
+    if not _has_meter(master) and _has_meter(slave):
+        _LOGGER.info(
+            "External CT meter not detected on master; "
+            "using meter data from slave inverter for grid values."
+        )
+        for key in _METER_KEYS:
+            merged[key] = slave.get(key)
+        for key in _GRID_KEYS:
+            if slave.get(key) is not None:
+                merged[key] = slave[key]
+
+    return merged
+
+
 # ── Spike filter ──────────────────────────────────────────────────────────────
 
 class _SpikeFilter:
@@ -357,13 +431,21 @@ class _MonotonicGuard:
 # ── Coordinator ───────────────────────────────────────────────────────────────
 
 class GoodWeCoordinator(DataUpdateCoordinator):
-    """Fetches and filters data from a single GoodWe inverter."""
+    """Fetches and filters data from a GoodWe master (and optional slave) inverter."""
 
     def __init__(self, hass: HomeAssistant, entry_data: dict) -> None:
         self._host    = entry_data[CONF_HOST]
         self._port    = entry_data.get(CONF_MODBUS_PORT, DEFAULT_PORT)
         self._unit_id = entry_data.get(CONF_UNIT_ID, DEFAULT_UNIT_ID)
         interval      = entry_data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+
+        # Optional slave inverter — used in parallel/multi-inverter setups where
+        # the external CT meter may be connected to either the master or the slave.
+        # An empty string from the config-flow default is normalised to None so that
+        # the single-inverter path is taken when no slave is configured.
+        self._slave_host    = entry_data.get(CONF_SLAVE_HOST) or None
+        self._slave_port    = entry_data.get(CONF_SLAVE_MODBUS_PORT, DEFAULT_PORT)
+        self._slave_unit_id = entry_data.get(CONF_SLAVE_UNIT_ID, DEFAULT_UNIT_ID)
 
         super().__init__(
             hass,
@@ -426,6 +508,25 @@ class GoodWeCoordinator(DataUpdateCoordinator):
 
         if data is None:
             raise UpdateFailed(f"No data received from inverter at {self._host}")
+
+        # ── Optional slave inverter ───────────────────────────────────────────
+        # In a parallel (master/slave) GoodWe setup, the external CT meter is
+        # physically wired to only one inverter.  Read the slave when configured
+        # and merge the two datasets: PV/battery totals are summed; grid and
+        # meter values come from whichever inverter has Block B meter data
+        # (master preferred, slave used as fallback).
+        if self._slave_host:
+            slave_data = await self.hass.async_add_executor_job(
+                _read_inverter, self._slave_host, self._slave_port, self._slave_unit_id
+            )
+            if slave_data is not None:
+                data = _merge_master_slave(data, slave_data)
+            else:
+                _LOGGER.warning(
+                    "No data received from slave inverter at %s; "
+                    "continuing with master data only.",
+                    self._slave_host,
+                )
 
         # Spike-filter energy counters first, then apply monotonic guards so that
         # a single corrupted reading cannot permanently lock the counter too high.

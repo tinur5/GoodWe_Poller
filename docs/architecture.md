@@ -152,13 +152,19 @@ goodwe_direct/total/decoded/inverter_temp_c
 5. **Meter-priority overrides (SEMS+ alignment)**  
    When the external CT meter (Block B) is available its values are used as the
    single source of truth for grid energy and power, matching the SEMS+ portal:
-   - `grid_export_total_kwh` ← `meter_export_total_kwh` (Block B float32 Wh ÷1000 = kWh)
-   - `grid_import_total_kwh` ← `meter_import_total_kwh` (Block B float32 Wh ÷1000 = kWh)
+   - `grid_export_total_kwh` ← `meter_export_total_kwh` (Block B float32 kWh)
+   - `grid_import_total_kwh` ← `meter_import_total_kwh` (Block B float32 kWh)
    - `grid_power_w`          ← `meter_power_total_w`    (Block B s32, W)
 
    The Block A inverter-side values are still exposed as separate sensors for
    diagnostics but are **not** used for the primary grid energy / power readings.
    When Block B is absent the integration falls back to Block A values.
+
+   In a **master+slave** setup the coordinator first checks whether the master
+   has Block B data.  If the master has no external meter but the slave does,
+   the slave's Block B values are promoted to the combined grid/meter sensors
+   automatically.  This ensures the correct meter source is always used
+   regardless of which inverter the CT meter is physically connected to.
 
 6. **Per-cycle debug logging**  
    Every coordinator update emits a `DEBUG`-level log line with the key power
@@ -168,11 +174,34 @@ goodwe_direct/total/decoded/inverter_temp_c
 
 ## Home Assistant Devices (HA custom integration)
 
-Each config entry represents **one inverter** and creates a single HA device with
-all inverter and external meter sensors.
+Each config entry represents **one inverter** (or a master+slave pair) and creates
+a single HA device with all inverter and external meter sensors.
 
-To monitor multiple inverters, add this integration once per inverter via
-**Settings → Devices & Services → Add Integration**.
+### Single-inverter setup
+
+To monitor a single GoodWe inverter, add this integration once via
+**Settings → Devices & Services → Add Integration** and enter the master
+inverter's IP address.  Leave the *Slave Host* field blank.
+
+### Parallel/multi-inverter (master+slave) setup
+
+GoodWe ET/EH/BT/BH inverters can be connected in parallel.  In such a setup
+the external CT meter is physically wired to **only one** inverter (usually the
+master).  Both inverters have Block B registers, but only the one with the meter
+returns valid data.
+
+To poll a master+slave pair as a single combined device, fill in the
+**Slave Host** field when adding the integration.  The coordinator will then:
+
+1. Poll **both** inverters on every scan cycle.
+2. **Sum** PV generation and battery charge/discharge values across both units.
+3. Use the external CT meter (Block B) from **whichever inverter has it**
+   (master preferred; slave used automatically if master has no meter).
+4. Log an `INFO` message whenever the slave meter is chosen, so the source is
+   always transparent in the HA logs.
+
+If only the master is reachable on a given cycle, the coordinator logs a warning
+and continues with master-only data.
 
 External meter (Block B) sensors are included on each device and are **enabled
 by default**. If your inverter does not have an external CT meter connected,
