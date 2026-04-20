@@ -1,11 +1,12 @@
 {
   "domain": "goodwe_modbus",
   "name": "GoodWe Modbus",
-  "version": "1.0.0",
-  "requirements": ["pymodbus>=3.5.0"],
-  "dependencies": [],
   "codeowners": [],
-  "iot_class": "local_polling",
   "config_flow": true,
-  "documentation": "https://github.com/tinur5/GoodWe_Poller"
+  "dependencies": [],
+  "documentation": "https://github.com/tinur5/GoodWe_Poller",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/tinur5/GoodWe_Poller/issues",
+  "requirements": ["pymodbus>=3.5.0"],
+  "version": "1.0.0"
 }
