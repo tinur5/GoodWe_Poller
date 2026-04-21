@@ -199,6 +199,22 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
                     host, len(b), _B_FULL_LEN,
                 )
 
+            # Debug: dump the raw register words for the float32 energy counters
+            # so firmware/scaling issues can be diagnosed from the log alone.
+            if b is not None:
+                hi_exp, lo_exp = b[_B["e_total_export_hi"]], b[_B["e_total_export_lo"]]
+                hi_imp, lo_imp = b[_B["e_total_import_hi"]], b[_B["e_total_import_lo"]]
+                _LOGGER.debug(
+                    "Block B meter energy raw registers from %s — "
+                    "36015 (export hi): 0x%04X (%d), "
+                    "36016 (export lo): 0x%04X (%d), "
+                    "36017 (import hi): 0x%04X (%d), "
+                    "36018 (import lo): 0x%04X (%d)",
+                    host,
+                    hi_exp, hi_exp, lo_exp, lo_exp,
+                    hi_imp, hi_imp, lo_imp, lo_imp,
+                )
+
         rr_c = client.read_holding_registers(
             address=_BLOCK_C_START, count=_BLOCK_C_COUNT, device_id=unit_id)
         if rr_c.isError():
@@ -247,6 +263,18 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
     # Per GoodWe ARM register spec (unit=1kWh): the float32 value is already in kWh.
     meter_exp_kwh = _f32(rb("e_total_export_hi"), rb("e_total_export_lo")) if b else None
     meter_imp_kwh = _f32(rb("e_total_import_hi"), rb("e_total_import_lo")) if b else None
+
+    if b is not None:
+        _LOGGER.debug(
+            "Block B meter energy decoded from %s — "
+            "36015-36016 export float32: %s kWh (clamped → %s), "
+            "36017-36018 import float32: %s kWh (clamped → %s)",
+            host,
+            meter_exp_kwh,
+            _clamp(meter_exp_kwh, _MAX_ENERGY) if meter_exp_kwh is not None else None,
+            meter_imp_kwh,
+            _clamp(meter_imp_kwh, _MAX_ENERGY) if meter_imp_kwh is not None else None,
+        )
 
     return {
         "pv1_voltage_v":   _clamp(a[_A["vpv1"]] * 0.1, _MAX_PV_VOLT),
