@@ -163,12 +163,103 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
         return None
 
     try:
+        _LOGGER.debug("Reading Block A (%d registers @ %d) from %s unit_id=%d",
+                      _BLOCK_A_COUNT, _BLOCK_A_START, host, unit_id)
         rr_a = client.read_holding_registers(
             address=_BLOCK_A_START, count=_BLOCK_A_COUNT, device_id=unit_id)
         if rr_a.isError():
             _LOGGER.warning("Modbus error (block A) from %s: %s", host, rr_a)
             return None
         a = rr_a.registers
+        _LOGGER.debug("Block A from %s: %d register(s) received", host, len(a))
+        # Log key Block A raw register values for diagnostics
+        _LOGGER.debug(
+            "Block A raw PV voltages/currents from %s — "
+            "vpv1=0x%04X (%.1fV), ipv1=0x%04X (%.1fA) | "
+            "vpv2=0x%04X (%.1fV), ipv2=0x%04X (%.1fA) | "
+            "vpv3=0x%04X (%.1fV), ipv3=0x%04X (%.1fA) | "
+            "vpv4=0x%04X (%.1fV), ipv4=0x%04X (%.1fA)",
+            host,
+            a[_A["vpv1"]], a[_A["vpv1"]] * 0.1,
+            a[_A["ipv1"]], a[_A["ipv1"]] * 0.1,
+            a[_A["vpv2"]], a[_A["vpv2"]] * 0.1,
+            a[_A["ipv2"]], a[_A["ipv2"]] * 0.1,
+            a[_A["vpv3"]], a[_A["vpv3"]] * 0.1,
+            a[_A["ipv3"]], a[_A["ipv3"]] * 0.1,
+            a[_A["vpv4"]], a[_A["vpv4"]] * 0.1,
+            a[_A["ipv4"]], a[_A["ipv4"]] * 0.1,
+        )
+        _LOGGER.debug(
+            "Block A raw PV power registers from %s — "
+            "ppv1 hi=0x%04X lo=0x%04X → u32=%d W | "
+            "ppv2 hi=0x%04X lo=0x%04X → u32=%d W | "
+            "ppv3 hi=0x%04X lo=0x%04X → u32=%d W | "
+            "ppv4 hi=0x%04X lo=0x%04X → u32=%d W",
+            host,
+            a[_A["ppv1_hi"]], a[_A["ppv1_lo"]], _u32(a[_A["ppv1_hi"]], a[_A["ppv1_lo"]]),
+            a[_A["ppv2_hi"]], a[_A["ppv2_lo"]], _u32(a[_A["ppv2_hi"]], a[_A["ppv2_lo"]]),
+            a[_A["ppv3_hi"]], a[_A["ppv3_lo"]], _u32(a[_A["ppv3_hi"]], a[_A["ppv3_lo"]]),
+            a[_A["ppv4_hi"]], a[_A["ppv4_lo"]], _u32(a[_A["ppv4_hi"]], a[_A["ppv4_lo"]]),
+        )
+        _LOGGER.debug(
+            "Block A raw grid registers from %s — "
+            "vgrid_r=0x%04X (%.1fV) | fgrid_r=0x%04X (%.2fHz) | "
+            "pgrid_r=0x%04X (s16=%d W) | pgrid_s=0x%04X (s16=%d W) | "
+            "pgrid_t=0x%04X (s16=%d W) | pgrid_total=0x%04X (s16=%d W)",
+            host,
+            a[_A["vgrid_r"]], a[_A["vgrid_r"]] * 0.1,
+            a[_A["fgrid_r"]], a[_A["fgrid_r"]] * 0.01,
+            a[_A["pgrid_r"]], _s16(a[_A["pgrid_r"]]),
+            a[_A["pgrid_s"]], _s16(a[_A["pgrid_s"]]),
+            a[_A["pgrid_t"]], _s16(a[_A["pgrid_t"]]),
+            a[_A["pgrid_total"]], _s16(a[_A["pgrid_total"]]),
+        )
+        _LOGGER.debug(
+            "Block A raw battery/load/temp registers from %s — "
+            "pbattery hi=0x%04X lo=0x%04X (s32=%d W) | "
+            "pload=0x%04X (s16=%d W) | "
+            "temp_heatsink=0x%04X (%.1f°C) | temp_air=0x%04X (%.1f°C) | "
+            "work_mode=0x%04X",
+            host,
+            a[_A["pbattery_hi"]], a[_A["pbattery_lo"]],
+            _s32(a[_A["pbattery_hi"]], a[_A["pbattery_lo"]]),
+            a[_A["pload"]], _s16(a[_A["pload"]]),
+            a[_A["temperature_heatsink"]], _s16(a[_A["temperature_heatsink"]]) * 0.1,
+            a[_A["temperature_air"]],      _s16(a[_A["temperature_air"]]) * 0.1,
+            a[_A["work_mode"]],
+        )
+        _LOGGER.debug(
+            "Block A raw energy registers from %s — "
+            "e_total_pv hi=0x%04X lo=0x%04X (u32=%d → %.1f kWh) | "
+            "e_day_pv hi=0x%04X lo=0x%04X (u32=%d → %.1f kWh) | "
+            "e_total_export hi=0x%04X lo=0x%04X (u32=%d → %.1f kWh) | "
+            "e_total_import hi=0x%04X lo=0x%04X (u32=%d → %.1f kWh) | "
+            "e_bat_chg_total hi=0x%04X lo=0x%04X (u32=%d → %.1f kWh) | "
+            "e_bat_chg_day=0x%04X (%.1f kWh) | "
+            "e_bat_dis_total hi=0x%04X lo=0x%04X (u32=%d → %.1f kWh) | "
+            "e_bat_dis_day=0x%04X (%.1f kWh)",
+            host,
+            a[_A["e_total_pv_hi"]], a[_A["e_total_pv_lo"]],
+            _u32(a[_A["e_total_pv_hi"]], a[_A["e_total_pv_lo"]]),
+            _u32(a[_A["e_total_pv_hi"]], a[_A["e_total_pv_lo"]]) * 0.1,
+            a[_A["e_day_pv_hi"]], a[_A["e_day_pv_lo"]],
+            _u32(a[_A["e_day_pv_hi"]], a[_A["e_day_pv_lo"]]),
+            _u32(a[_A["e_day_pv_hi"]], a[_A["e_day_pv_lo"]]) * 0.1,
+            a[_A["e_total_export_hi"]], a[_A["e_total_export_lo"]],
+            _u32(a[_A["e_total_export_hi"]], a[_A["e_total_export_lo"]]),
+            _u32(a[_A["e_total_export_hi"]], a[_A["e_total_export_lo"]]) * 0.1,
+            a[_A["e_total_import_hi"]], a[_A["e_total_import_lo"]],
+            _u32(a[_A["e_total_import_hi"]], a[_A["e_total_import_lo"]]),
+            _u32(a[_A["e_total_import_hi"]], a[_A["e_total_import_lo"]]) * 0.1,
+            a[_A["e_bat_charge_total_hi"]], a[_A["e_bat_charge_total_lo"]],
+            _u32(a[_A["e_bat_charge_total_hi"]], a[_A["e_bat_charge_total_lo"]]),
+            _u32(a[_A["e_bat_charge_total_hi"]], a[_A["e_bat_charge_total_lo"]]) * 0.1,
+            a[_A["e_bat_charge_day"]], a[_A["e_bat_charge_day"]] * 0.1,
+            a[_A["e_bat_discharge_total_hi"]], a[_A["e_bat_discharge_total_lo"]],
+            _u32(a[_A["e_bat_discharge_total_hi"]], a[_A["e_bat_discharge_total_lo"]]),
+            _u32(a[_A["e_bat_discharge_total_hi"]], a[_A["e_bat_discharge_total_lo"]]) * 0.1,
+            a[_A["e_bat_discharge_day"]], a[_A["e_bat_discharge_day"]] * 0.1,
+        )
 
         rr_b = client.read_holding_registers(
             address=_BLOCK_B_START, count=_BLOCK_B_COUNT, device_id=unit_id)
@@ -177,21 +268,18 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
             b = None
         else:
             b = rr_b.registers
-            # Need ≥19 registers (offsets 5–9 for int16 power, 13–14 for PF/freq,
-            # and 15–18 for float32 energy totals) for basic meter data.
-            # Need ≥27 registers (additionally offsets 25–26) to read int32 total power.
-            # Some inverter firmware versions return a shorter Block B response that
-            # covers energy registers (0–18) but omits the extended power word (25–26).
-            # In that case we keep the partial block so energy sensors remain available.
             _B_PARTIAL_LEN = 19  # minimum for int16 power + float32 energy
             _B_FULL_LEN = 27     # required for 32-bit total power (offsets 25–26)
+            _LOGGER.debug(
+                "Block B from %s: %d register(s) received (need ≥%d for basic, ≥%d for 32-bit power)",
+                host, len(b), _B_PARTIAL_LEN, _B_FULL_LEN,
+            )
             if len(b) < _B_PARTIAL_LEN:
                 _LOGGER.warning(
-                    "Block B from %s returned only %d register(s) (need ≥%d) — "
-                    "meter sensors will be unavailable.",
+                    "Block B from %s returned only %d register(s) (need ≥%d for full meter data) — "
+                    "reading available registers anyway; missing offsets will read as 0.",
                     host, len(b), _B_PARTIAL_LEN,
                 )
-                b = None
             elif len(b) < _B_FULL_LEN:
                 _LOGGER.debug(
                     "Block B from %s returned only %d register(s) (need ≥%d for "
@@ -199,20 +287,75 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
                     host, len(b), _B_FULL_LEN,
                 )
 
-            # Debug: dump the raw register words for the float32 energy counters
-            # so firmware/scaling issues can be diagnosed from the log alone.
-            if b is not None:
-                hi_exp, lo_exp = b[_B["e_total_export_hi"]], b[_B["e_total_export_lo"]]
-                hi_imp, lo_imp = b[_B["e_total_import_hi"]], b[_B["e_total_import_lo"]]
+            # Log meter_status register (offset 0: 0=not connected, 1=single-phase, 2=three-phase)
+            meter_status_raw = b[_B["meter_status"]] if len(b) > _B["meter_status"] else None
+            _LOGGER.debug(
+                "Block B meter_status raw from %s: %s (0=not connected, 1=single-phase, 2=three-phase)",
+                host, meter_status_raw,
+            )
+
+            # Log per-phase and total power registers (int16, W)
+            for reg_name, reg_key in (
+                ("meter_p1 (L1, offset 5)", "meter_p1"),
+                ("meter_p2 (L2, offset 6)", "meter_p2"),
+                ("meter_p3 (L3, offset 7)", "meter_p3"),
+                ("meter_p  (total, offset 8)", "meter_p"),
+                ("meter_q  (reactive, offset 9)", "meter_q"),
+            ):
+                idx = _B[reg_key]
+                raw = b[idx] if idx < len(b) else None
                 _LOGGER.debug(
-                    "Block B meter energy raw registers from %s — "
-                    "36015 (export hi): 0x%04X (%d), "
-                    "36016 (export lo): 0x%04X (%d), "
-                    "36017 (import hi): 0x%04X (%d), "
-                    "36018 (import lo): 0x%04X (%d)",
+                    "Block B %s from %s: raw=0x%04X (%d) → s16=%d W",
+                    reg_name, host,
+                    raw if raw is not None else 0,
+                    raw if raw is not None else 0,
+                    _s16(raw) if raw is not None else 0,
+                )
+
+            # Log power-factor and frequency registers
+            for reg_name, reg_key, scale, unit in (
+                ("meter_pf  (offset 13)", "meter_pf",   0.001, ""),
+                ("meter_freq (offset 14)", "meter_freq", 0.01,  "Hz"),
+            ):
+                idx = _B[reg_key]
+                raw = b[idx] if idx < len(b) else None
+                _LOGGER.debug(
+                    "Block B %s from %s: raw=0x%04X (%d) → %.4f %s",
+                    reg_name, host,
+                    raw if raw is not None else 0,
+                    raw if raw is not None else 0,
+                    (raw * scale) if raw is not None else 0.0,
+                    unit,
+                )
+
+            # Log float32 energy counter registers (36015–36018)
+            hi_exp_idx, lo_exp_idx = _B["e_total_export_hi"], _B["e_total_export_lo"]
+            hi_imp_idx, lo_imp_idx = _B["e_total_import_hi"], _B["e_total_import_lo"]
+            hi_exp = b[hi_exp_idx] if hi_exp_idx < len(b) else 0
+            lo_exp = b[lo_exp_idx] if lo_exp_idx < len(b) else 0
+            hi_imp = b[hi_imp_idx] if hi_imp_idx < len(b) else 0
+            lo_imp = b[lo_imp_idx] if lo_imp_idx < len(b) else 0
+            _LOGGER.debug(
+                "Block B meter energy raw registers from %s — "
+                "36015 (export hi): 0x%04X (%d), "
+                "36016 (export lo): 0x%04X (%d) → export float32=%.3f kWh | "
+                "36017 (import hi): 0x%04X (%d), "
+                "36018 (import lo): 0x%04X (%d) → import float32=%.3f kWh",
+                host,
+                hi_exp, hi_exp, lo_exp, lo_exp, _f32(hi_exp, lo_exp),
+                hi_imp, hi_imp, lo_imp, lo_imp, _f32(hi_imp, lo_imp),
+            )
+
+            # Log 32-bit total power registers (offsets 25–26) if available
+            if len(b) >= _B_FULL_LEN:
+                hi_pt = b[_B["meter_p_total_hi"]]
+                lo_pt = b[_B["meter_p_total_lo"]]
+                _LOGGER.debug(
+                    "Block B meter_p_total (int32) from %s: "
+                    "hi=0x%04X (%d), lo=0x%04X (%d) → s32=%d W (negated for HA: %d W)",
                     host,
-                    hi_exp, hi_exp, lo_exp, lo_exp,
-                    hi_imp, hi_imp, lo_imp, lo_imp,
+                    hi_pt, hi_pt, lo_pt, lo_pt,
+                    _s32(hi_pt, lo_pt), -_s32(hi_pt, lo_pt),
                 )
 
         rr_c = client.read_holding_registers(
@@ -222,6 +365,13 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
             c = None
         else:
             c = rr_c.registers
+            _LOGGER.debug(
+                "Block C from %s: %d register(s) received — "
+                "battery_soc raw=0x%04X (%d%%)",
+                host, len(c),
+                c[_C["battery_soc"]] if len(c) > _C["battery_soc"] else 0,
+                c[_C["battery_soc"]] if len(c) > _C["battery_soc"] else 0,
+            )
 
     except ModbusException as exc:
         _LOGGER.error("ModbusException from %s: %s", host, exc)
@@ -248,9 +398,14 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
     ppv3 = _clamp(float(_u32(a[_A["ppv3_hi"]], a[_A["ppv3_lo"]])), _MAX_PV_W)
     ppv4 = _clamp(float(_u32(a[_A["ppv4_hi"]], a[_A["ppv4_lo"]])), _MAX_PV_W)
     pv_total = sum(p for p in (ppv1, ppv2, ppv3, ppv4) if p is not None)
+    _LOGGER.debug(
+        "Decoded PV power from %s — ppv1=%s W, ppv2=%s W, ppv3=%s W, ppv4=%s W → total=%s W",
+        host, ppv1, ppv2, ppv3, ppv4, pv_total,
+    )
 
     # Battery power: signed int32 (+ = discharging into house, − = charging)
     bat_power = _clamp(float(_s32(a[_A["pbattery_hi"]], a[_A["pbattery_lo"]])), _MAX_BAT_W)
+    _LOGGER.debug("Decoded battery power from %s — bat_power=%s W", host, bat_power)
 
     # External meter: total active power as signed int32, negated for HA convention.
     # Only available when Block B has ≥27 registers (offsets 25–26 present).
@@ -258,25 +413,26 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
         _clamp(-float(_s32(rb("meter_p_total_hi"), rb("meter_p_total_lo"))), _MAX_GRID_W)
         if b is not None and len(b) >= 27 else None
     )
+    _LOGGER.debug(
+        "Decoded meter_p_total32 from %s — %s W (Block B len=%s)",
+        host, meter_p_total32, len(b) if b is not None else "N/A",
+    )
 
     # External meter energy totals: float32 registers 36015–36018.
     # Per GoodWe ARM register spec (unit=1kWh): the float32 value is already in kWh.
     meter_exp_kwh = _f32(rb("e_total_export_hi"), rb("e_total_export_lo")) if b else None
     meter_imp_kwh = _f32(rb("e_total_import_hi"), rb("e_total_import_lo")) if b else None
+    _LOGGER.debug(
+        "Decoded meter energy from %s — "
+        "export float32=%s kWh (clamped=%s), import float32=%s kWh (clamped=%s)",
+        host,
+        meter_exp_kwh,
+        _clamp(meter_exp_kwh, _MAX_ENERGY) if meter_exp_kwh is not None else None,
+        meter_imp_kwh,
+        _clamp(meter_imp_kwh, _MAX_ENERGY) if meter_imp_kwh is not None else None,
+    )
 
-    if b is not None:
-        _LOGGER.debug(
-            "Block B meter energy decoded from %s — "
-            "36015-36016 export float32: %s kWh (clamped → %s), "
-            "36017-36018 import float32: %s kWh (clamped → %s)",
-            host,
-            meter_exp_kwh,
-            _clamp(meter_exp_kwh, _MAX_ENERGY) if meter_exp_kwh is not None else None,
-            meter_imp_kwh,
-            _clamp(meter_imp_kwh, _MAX_ENERGY) if meter_imp_kwh is not None else None,
-        )
-
-    return {
+    result = {
         "pv1_voltage_v":   _clamp(a[_A["vpv1"]] * 0.1, _MAX_PV_VOLT),
         "pv1_current_a":   a[_A["ipv1"]] * 0.1,
         "pv1_power_w":     ppv1,
@@ -325,6 +481,38 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
         "meter_export_total_kwh": _clamp(meter_exp_kwh, _MAX_ENERGY) if meter_exp_kwh is not None else None,
         "meter_import_total_kwh": _clamp(meter_imp_kwh, _MAX_ENERGY) if meter_imp_kwh is not None else None,
     }
+    _LOGGER.debug(
+        "Decoded result dict from %s — "
+        "pv1=%s W, pv2=%s W, pv3=%s W, pv4=%s W, pv_total=%s W | "
+        "battery=%s W, soc=%s%% | "
+        "grid_r=%s W, grid_s=%s W, grid_t=%s W, grid=%s W | "
+        "load=%s W | work_mode=%s | "
+        "heatsink=%.1f°C, air=%.1f°C | "
+        "pv_today=%s kWh, pv_total=%s kWh | "
+        "bat_chg_today=%s kWh, bat_dis_today=%s kWh | "
+        "bat_chg_total=%s kWh, bat_dis_total=%s kWh | "
+        "grid_exp_total=%s kWh, grid_imp_total=%s kWh | "
+        "meter_status=%s | meter_r=%s W, meter_s=%s W, meter_t=%s W, meter=%s W, meter32=%s W | "
+        "meter_exp=%s kWh, meter_imp=%s kWh | meter_freq=%s Hz, meter_pf=%s",
+        host,
+        result.get("pv1_power_w"), result.get("pv2_power_w"),
+        result.get("pv3_power_w"), result.get("pv4_power_w"), result.get("pv_power_w"),
+        result.get("battery_power_w"), result.get("battery_soc_pct"),
+        result.get("grid_power_r_w"), result.get("grid_power_s_w"),
+        result.get("grid_power_t_w"), result.get("grid_power_w"),
+        result.get("load_power_w"), result.get("work_mode"),
+        result.get("heatsink_temp_c") or 0.0, result.get("air_temp_c") or 0.0,
+        result.get("pv_energy_today_kwh"), result.get("pv_energy_total_kwh"),
+        result.get("battery_charge_today_kwh"), result.get("battery_discharge_today_kwh"),
+        result.get("battery_charge_total_kwh"), result.get("battery_discharge_total_kwh"),
+        result.get("grid_export_total_kwh"), result.get("grid_import_total_kwh"),
+        result.get("meter_status"),
+        result.get("meter_power_r_w"), result.get("meter_power_s_w"),
+        result.get("meter_power_t_w"), result.get("meter_power_w"), result.get("meter_power_total_w"),
+        result.get("meter_export_total_kwh"), result.get("meter_import_total_kwh"),
+        result.get("meter_frequency_hz"), result.get("meter_power_factor"),
+    )
+    return result
 
 
 # ── Master/slave merge helpers ────────────────────────────────────────────────
@@ -564,6 +752,15 @@ class GoodWeCoordinator(DataUpdateCoordinator):
 
         # Spike-filter energy counters first, then apply monotonic guards so that
         # a single corrupted reading cannot permanently lock the counter too high.
+        _LOGGER.debug(
+            "Before energy spike-filters — "
+            "pv_total=%s, grid_exp=%s, grid_imp=%s, "
+            "meter_exp=%s, meter_imp=%s, bat_chg=%s, bat_dis=%s",
+            data.get("pv_energy_total_kwh"), data.get("grid_export_total_kwh"),
+            data.get("grid_import_total_kwh"), data.get("meter_export_total_kwh"),
+            data.get("meter_import_total_kwh"), data.get("battery_charge_total_kwh"),
+            data.get("battery_discharge_total_kwh"),
+        )
         data["pv_energy_total_kwh"]          = self._sf_e_pv_total(data.get("pv_energy_total_kwh"))
         data["grid_export_total_kwh"]        = self._sf_e_export_total(data.get("grid_export_total_kwh"))
         data["grid_import_total_kwh"]        = self._sf_e_import_total(data.get("grid_import_total_kwh"))
@@ -571,19 +768,73 @@ class GoodWeCoordinator(DataUpdateCoordinator):
         data["meter_import_total_kwh"]       = self._sf_e_meter_imp_total(data.get("meter_import_total_kwh"))
         data["battery_charge_total_kwh"]     = self._sf_e_bat_chg_total(data.get("battery_charge_total_kwh"))
         data["battery_discharge_total_kwh"]  = self._sf_e_bat_dis_total(data.get("battery_discharge_total_kwh"))
+        _LOGGER.debug(
+            "After energy spike-filters — "
+            "pv_total=%s, grid_exp=%s, grid_imp=%s, "
+            "meter_exp=%s, meter_imp=%s, bat_chg=%s, bat_dis=%s",
+            data.get("pv_energy_total_kwh"), data.get("grid_export_total_kwh"),
+            data.get("grid_import_total_kwh"), data.get("meter_export_total_kwh"),
+            data.get("meter_import_total_kwh"), data.get("battery_charge_total_kwh"),
+            data.get("battery_discharge_total_kwh"),
+        )
 
         # Spike-filter daily energy counters — u16 register corruption (e.g. 65535)
         # yields 6 553.5 kWh which is far above the tight _MAX_ENERGY_DAY clamp but
         # the filter catches any residual implausible jumps as a second line of defence.
+        _LOGGER.debug(
+            "Before daily energy spike-filters — pv_today=%s, bat_chg_today=%s, bat_dis_today=%s",
+            data.get("pv_energy_today_kwh"),
+            data.get("battery_charge_today_kwh"),
+            data.get("battery_discharge_today_kwh"),
+        )
         data["pv_energy_today_kwh"]          = self._sf_e_pv_today(data.get("pv_energy_today_kwh"))
         data["battery_charge_today_kwh"]     = self._sf_e_bat_chg_today(data.get("battery_charge_today_kwh"))
         data["battery_discharge_today_kwh"]  = self._sf_e_bat_dis_today(data.get("battery_discharge_today_kwh"))
+        _LOGGER.debug(
+            "After daily energy spike-filters — pv_today=%s, bat_chg_today=%s, bat_dis_today=%s",
+            data.get("pv_energy_today_kwh"),
+            data.get("battery_charge_today_kwh"),
+            data.get("battery_discharge_today_kwh"),
+        )
 
         # Apply monotonic guards
+        _LOGGER.debug(
+            "Before monotonic guards — "
+            "pv_total=%s, grid_exp=%s, grid_imp=%s, "
+            "meter_exp=%s, meter_imp=%s, bat_chg=%s, bat_dis=%s",
+            data.get("pv_energy_total_kwh"), data.get("grid_export_total_kwh"),
+            data.get("grid_import_total_kwh"), data.get("meter_export_total_kwh"),
+            data.get("meter_import_total_kwh"), data.get("battery_charge_total_kwh"),
+            data.get("battery_discharge_total_kwh"),
+        )
         for key, guard in self._mono.items():
-            data[key] = guard(data.get(key))
+            before = data.get(key)
+            data[key] = guard(before)
+            if data[key] != before:
+                _LOGGER.debug("Monotonic guard clamped %s: %s → %s", key, before, data[key])
+        _LOGGER.debug(
+            "After monotonic guards — "
+            "pv_total=%s, grid_exp=%s, grid_imp=%s, "
+            "meter_exp=%s, meter_imp=%s, bat_chg=%s, bat_dis=%s",
+            data.get("pv_energy_total_kwh"), data.get("grid_export_total_kwh"),
+            data.get("grid_import_total_kwh"), data.get("meter_export_total_kwh"),
+            data.get("meter_import_total_kwh"), data.get("battery_charge_total_kwh"),
+            data.get("battery_discharge_total_kwh"),
+        )
 
         # Apply output spike filters — individual PV strings
+        _LOGGER.debug(
+            "Before power spike-filters — pv1=%s, pv2=%s, pv3=%s, pv4=%s, pv=%s, "
+            "bat=%s, grid=%s, grid_r=%s, grid_s=%s, grid_t=%s, load=%s, "
+            "meter=%s, meter_r=%s, meter_s=%s, meter_t=%s, meter32=%s",
+            data.get("pv1_power_w"), data.get("pv2_power_w"),
+            data.get("pv3_power_w"), data.get("pv4_power_w"), data.get("pv_power_w"),
+            data.get("battery_power_w"), data.get("grid_power_w"),
+            data.get("grid_power_r_w"), data.get("grid_power_s_w"), data.get("grid_power_t_w"),
+            data.get("load_power_w"), data.get("meter_power_w"),
+            data.get("meter_power_r_w"), data.get("meter_power_s_w"), data.get("meter_power_t_w"),
+            data.get("meter_power_total_w"),
+        )
         data["pv1_power_w"] = self._sf_pv1(data.get("pv1_power_w"))
         data["pv2_power_w"] = self._sf_pv2(data.get("pv2_power_w"))
         data["pv3_power_w"] = self._sf_pv3(data.get("pv3_power_w"))
@@ -609,6 +860,18 @@ class GoodWeCoordinator(DataUpdateCoordinator):
         data["meter_power_t_w"]    = self._sf_meter_t(data.get("meter_power_t_w"))
         data["meter_power_w"]      = self._sf_meter(data.get("meter_power_w"))
         data["meter_power_total_w"] = self._sf_meter32(data.get("meter_power_total_w"))
+        _LOGGER.debug(
+            "After power spike-filters — pv1=%s, pv2=%s, pv3=%s, pv4=%s, pv=%s, "
+            "bat=%s, grid=%s, grid_r=%s, grid_s=%s, grid_t=%s, load=%s, "
+            "meter=%s, meter_r=%s, meter_s=%s, meter_t=%s, meter32=%s",
+            data.get("pv1_power_w"), data.get("pv2_power_w"),
+            data.get("pv3_power_w"), data.get("pv4_power_w"), data.get("pv_power_w"),
+            data.get("battery_power_w"), data.get("grid_power_w"),
+            data.get("grid_power_r_w"), data.get("grid_power_s_w"), data.get("grid_power_t_w"),
+            data.get("load_power_w"), data.get("meter_power_w"),
+            data.get("meter_power_r_w"), data.get("meter_power_s_w"), data.get("meter_power_t_w"),
+            data.get("meter_power_total_w"),
+        )
 
         # ── Meter-priority overrides ──────────────────────────────────────────
         # When the external CT meter (Block B) is present its values match the
@@ -628,15 +891,51 @@ class GoodWeCoordinator(DataUpdateCoordinator):
         meter_exp = data.get("meter_export_total_kwh")
         meter_imp = data.get("meter_import_total_kwh")
         meter_pw  = data.get("meter_power_total_w")
+        _LOGGER.debug(
+            "Meter-priority override check — "
+            "meter_exp=%s kWh, meter_imp=%s kWh, meter_pw=%s W | "
+            "current grid_exp=%s kWh, grid_imp=%s kWh, grid_power=%s W",
+            meter_exp, meter_imp, meter_pw,
+            data.get("grid_export_total_kwh"), data.get("grid_import_total_kwh"),
+            data.get("grid_power_w"),
+        )
 
         if meter_exp is not None and meter_exp > 0:
+            _LOGGER.debug(
+                "Override grid_export_total_kwh: %s → %s (meter)",
+                data.get("grid_export_total_kwh"), meter_exp,
+            )
             data["grid_export_total_kwh"] = meter_exp
+        else:
+            _LOGGER.debug(
+                "No override for grid_export_total_kwh (meter_exp=%s ≤0 or None); keeping Block A value=%s",
+                meter_exp, data.get("grid_export_total_kwh"),
+            )
         if meter_imp is not None and meter_imp > 0:
+            _LOGGER.debug(
+                "Override grid_import_total_kwh: %s → %s (meter)",
+                data.get("grid_import_total_kwh"), meter_imp,
+            )
             data["grid_import_total_kwh"] = meter_imp
+        else:
+            _LOGGER.debug(
+                "No override for grid_import_total_kwh (meter_imp=%s ≤0 or None); keeping Block A value=%s",
+                meter_imp, data.get("grid_import_total_kwh"),
+            )
         if meter_pw is not None:
             # Re-apply the same 30 W deadband used for Block A grid power
             # to suppress sub-threshold noise when the grid exchange is near zero.
-            data["grid_power_w"] = 0.0 if abs(meter_pw) < 30 else meter_pw
+            new_grid_pw = 0.0 if abs(meter_pw) < 30 else meter_pw
+            _LOGGER.debug(
+                "Override grid_power_w: %s → %s (meter32=%s, deadband applied)",
+                data.get("grid_power_w"), new_grid_pw, meter_pw,
+            )
+            data["grid_power_w"] = new_grid_pw
+        else:
+            _LOGGER.debug(
+                "No override for grid_power_w (meter_power_total_w is None); keeping=%s",
+                data.get("grid_power_w"),
+            )
 
         # ── Per-cycle debug logging ───────────────────────────────────────────
         _LOGGER.debug(
