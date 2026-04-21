@@ -275,7 +275,7 @@ def _read_inverter(host: str, port: int, unit_id: int) -> Optional[dict]:
                 host, len(b), _B_PARTIAL_LEN, _B_FULL_LEN,
             )
             if len(b) < _B_PARTIAL_LEN:
-                _LOGGER.warning(
+                _LOGGER.info(
                     "Block B from %s returned only %d register(s) (need ≥%d for full meter data) — "
                     "reading available registers anyway; missing offsets will read as 0.",
                     host, len(b), _B_PARTIAL_LEN,
