@@ -546,3 +546,75 @@ class TestReadInverterMeter:
         }):
             result = _read_inverter("192.168.1.1", 502, 247)
         assert result["meter_status"] is None
+
+
+# ── Debug logging for meter energy registers ──────────────────────────────────
+
+class TestMeterEnergyDebugLogging:
+    """Verify that detailed DEBUG messages are emitted for registers 36015–36018."""
+
+    def _run(self, b_regs, caplog):
+        mock_client = _make_mock_client(_make_registers(125), b_regs, _make_registers(8))
+        import logging
+        with caplog.at_level(logging.DEBUG, logger="custom_components.goodwe_modbus.coordinator"):
+            with patch.dict("sys.modules", {
+                "pymodbus": MagicMock(),
+                "pymodbus.client": MagicMock(ModbusTcpClient=MagicMock(return_value=mock_client)),
+                "pymodbus.exceptions": MagicMock(ModbusException=Exception),
+            }):
+                return _read_inverter("192.168.1.1", 502, 247)
+
+    def test_raw_register_debug_message_logged(self, caplog):
+        """Raw hex/decimal register words for 36015-36018 must appear in DEBUG."""
+        hi_exp, lo_exp = _f32_regs(1500.75)
+        hi_imp, lo_imp = _f32_regs(2300.0)
+        b = _make_registers(50, {15: hi_exp, 16: lo_exp, 17: hi_imp, 18: lo_imp})
+        self._run(b, caplog)
+
+        raw_msg = next(
+            (r.message for r in caplog.records if "Block B meter energy raw registers" in r.message),
+            None,
+        )
+        assert raw_msg is not None, "Expected 'Block B meter energy raw registers' debug message"
+        # All four register words should appear as hex in the message
+        assert f"0x{hi_exp:04X}" in raw_msg
+        assert f"0x{lo_exp:04X}" in raw_msg
+        assert f"0x{hi_imp:04X}" in raw_msg
+        assert f"0x{lo_imp:04X}" in raw_msg
+        assert "36015" in raw_msg
+        assert "36017" in raw_msg
+
+    def test_decoded_float_debug_message_logged(self, caplog):
+        """Decoded float32 kWh values must appear in the 'decoded' DEBUG message."""
+        hi_exp, lo_exp = _f32_regs(1500.75)
+        hi_imp, lo_imp = _f32_regs(2300.0)
+        b = _make_registers(50, {15: hi_exp, 16: lo_exp, 17: hi_imp, 18: lo_imp})
+        self._run(b, caplog)
+
+        dec_msg = next(
+            (r.message for r in caplog.records if "Block B meter energy decoded" in r.message),
+            None,
+        )
+        assert dec_msg is not None, "Expected 'Block B meter energy decoded' debug message"
+        assert "36015" in dec_msg
+        assert "36017" in dec_msg
+
+    def test_raw_register_debug_absent_when_block_b_missing(self, caplog):
+        """No raw-register debug message should be logged when Block B is absent."""
+        mock_client = _make_mock_client(
+            _make_registers(125), None, _make_registers(8), b_error=True
+        )
+        import logging
+        with caplog.at_level(logging.DEBUG, logger="custom_components.goodwe_modbus.coordinator"):
+            with patch.dict("sys.modules", {
+                "pymodbus": MagicMock(),
+                "pymodbus.client": MagicMock(ModbusTcpClient=MagicMock(return_value=mock_client)),
+                "pymodbus.exceptions": MagicMock(ModbusException=Exception),
+            }):
+                _read_inverter("192.168.1.1", 502, 247)
+
+        raw_msg = next(
+            (r.message for r in caplog.records if "Block B meter energy raw registers" in r.message),
+            None,
+        )
+        assert raw_msg is None, "No raw-register debug message expected when Block B absent"
