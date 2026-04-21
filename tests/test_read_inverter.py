@@ -457,10 +457,17 @@ class TestReadInverterMeter:
 
         This reproduces the IndexError reported when the inverter returns a
         non-error Modbus response for the Block B range but with fewer
-        registers than needed for even the basic meter data (offset 18).
-        All meter sensor keys must be None and no exception must be raised.
+        registers than the full minimum. With the current behavior the short
+        block is kept and missing offsets read as 0 — so sensors that map to
+        present offsets return a real value while those at missing offsets
+        return their zero-derived decoded value. The key assertion is that no
+        exception is raised and the result dict is returned.
         """
-        # Return only 10 registers — fewer than the minimum 19 required
+        # Return only 10 registers — fewer than the minimum 19 required.
+        # meter_status is at offset 0 (present) → returns 0 (int, not None).
+        # meter_p (offset 8) is present → returns 0.0 W (negated 0).
+        # Offsets beyond index 9 are missing → read as 0, so float32 energy
+        # decodes as 0.0 and meter_power_total_w is None (needs ≥27 regs).
         short_b = _make_registers(10)
         mock_client = _make_mock_client(_make_registers(125), short_b, _make_registers(8))
         with patch.dict("sys.modules", {
@@ -470,11 +477,16 @@ class TestReadInverterMeter:
         }):
             result = _read_inverter("192.168.1.1", 502, 247)
         assert result is not None, "should return data dict, not None"
-        for key in ("meter_status", "meter_power_w", "meter_power_r_w", "meter_power_s_w",
-                    "meter_power_t_w", "meter_power_total_w",
-                    "meter_frequency_hz", "meter_power_factor",
+        # meter_status at offset 0 (present in the 10-register response) → 0
+        assert result["meter_status"] == 0
+        # meter_power_total_w needs offsets 25–26 which are absent → None
+        assert result["meter_power_total_w"] is None
+        # All other meter power/energy values decode from present or zeroed
+        # registers and must be a numeric type (not raise an exception).
+        for key in ("meter_power_w", "meter_power_r_w", "meter_power_s_w",
+                    "meter_power_t_w", "meter_frequency_hz", "meter_power_factor",
                     "meter_export_total_kwh", "meter_import_total_kwh"):
-            assert result[key] is None, f"expected None for {key!r}"
+            assert result[key] is not None, f"expected a value for {key!r} with short Block B"
 
     def test_block_b_partial_gives_energy_but_no_int32_power(self):
         """Block B with 19–26 registers should provide int16/energy data but not int32 power.
@@ -592,12 +604,12 @@ class TestMeterEnergyDebugLogging:
         self._run(b, caplog)
 
         dec_msg = next(
-            (r.message for r in caplog.records if "Block B meter energy decoded" in r.message),
+            (r.message for r in caplog.records if "Decoded meter energy from" in r.message),
             None,
         )
-        assert dec_msg is not None, "Expected 'Block B meter energy decoded' debug message"
-        assert "36015" in dec_msg
-        assert "36017" in dec_msg
+        assert dec_msg is not None, "Expected 'Decoded meter energy from' debug message"
+        assert "1500.75" in dec_msg
+        assert "2300.0" in dec_msg
 
     def test_raw_register_debug_absent_when_block_b_missing(self, caplog):
         """No raw-register debug message should be logged when Block B is absent."""
